@@ -1,0 +1,1693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Starfall Lanes</title>
+<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #05050c; overflow: hidden;
+    -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;
+    touch-action: none;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    overscroll-behavior: none;
+  }
+  #gameCanvas {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: block; touch-action: none;
+  }
+  .hud {
+    position: absolute; top: 0; left: 0; width: 100%;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 16px 20px; box-sizing: border-box;
+    pointer-events: none; z-index: 5;
+  }
+  .hud-score {
+    color: #fff; font-size: 28px; font-weight: 700;
+    text-shadow: 0 0 10px rgba(120,180,255,0.8), 0 2px 4px rgba(0,0,0,0.6);
+    letter-spacing: 1px;
+  }
+  .hud-best {
+    color: #9fd0ff; font-size: 14px; font-weight: 600; margin-top: 4px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+  }
+  .hud-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+  .hud-combo {
+    color: #ffd76a; font-size: 16px; font-weight: 700; text-align: right;
+    text-shadow: 0 0 10px rgba(255,180,60,0.7), 0 2px 4px rgba(0,0,0,0.6);
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .hud-combo.show { opacity: 1; animation: comboPop 0.25s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes comboPop {
+    0% { transform: scale(1.6); filter: brightness(1.8); }
+    100% { transform: scale(1); filter: brightness(1); }
+  }
+  .hud-score { transition: transform 0.12s ease, text-shadow 0.12s ease; }
+  .hud-score.bump { transform: scale(1.12); text-shadow: 0 0 18px rgba(120,180,255,1), 0 2px 4px rgba(0,0,0,0.6); }
+  .play-btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) {
+    .hud-combo.show { animation: none; }
+    .hud-score { transition: none; }
+  }
+  .mute-btn {
+    pointer-events: all; cursor: pointer; width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18);
+    display: flex; align-items: center; justify-content: center; font-size: 16px; color: #fff;
+  }
+  .powerup-row { position:absolute; top: 68px; left: 20px; display:flex; gap:8px; z-index:5; pointer-events:none; }
+  .pw-chip {
+    display:flex; align-items:center; gap:5px; background: rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.2);
+    border-radius: 16px; padding: 5px 10px; font-size: 12px; color:#fff; font-weight:700;
+  }
+
+  .overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(10,10,25,0.55) 0%, rgba(4,4,10,0.88) 100%);
+    z-index: 10; text-align: center; padding: 24px; box-sizing: border-box;
+    transition: opacity 0.25s ease;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+  .title {
+    font-size: clamp(34px, 9vw, 62px); font-weight: 800; color: #fff;
+    letter-spacing: 3px; margin: 0 0 8px 0;
+    background: linear-gradient(180deg, #ffffff 0%, #8fd6ff 60%, #5aa8ff 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 30px rgba(90,168,255,0.5);
+  }
+  .subtitle {
+    color: #b9c8e6; font-size: clamp(13px, 3.2vw, 16px); max-width: 420px;
+    line-height: 1.5; margin: 0 0 26px 0;
+  }
+  .subtitle b { color: #ffd76a; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; max-width:420px; margin-bottom: 24px; }
+  .legend-item { display:flex; flex-direction:column; align-items:center; gap:4px; font-size:11px; color:#a9bee0; }
+  .legend-dot { width:16px; height:16px; border-radius:4px; }
+  .big-score { color: #fff; font-size: clamp(40px, 12vw, 70px); font-weight: 800; margin: 0; text-shadow: 0 0 20px rgba(120,180,255,0.6); }
+  .big-score-label { color: #7fa0d0; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+  .best-row { color: #ffd76a; font-size: 16px; margin: 10px 0 26px 0; font-weight: 600; }
+
+  .play-btn {
+    padding: 16px 46px; font-size: 20px; font-weight: 800; letter-spacing: 1px;
+    color: #05050c; background: linear-gradient(180deg, #ffe38a, #ffb238);
+    border: none; border-radius: 50px; cursor: pointer;
+    box-shadow: 0 6px 0 #b5741a, 0 10px 25px rgba(255,178,56,0.35);
+    transition: transform 0.08s ease;
+  }
+  .play-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b5741a, 0 4px 12px rgba(255,178,56,0.3); }
+
+  .revive-btn {
+    margin-top: 14px; padding: 11px 30px; font-size: 14px; font-weight: 700; letter-spacing: 0.5px;
+    color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(120,190,255,0.5); border-radius: 40px;
+    cursor: pointer;
+  }
+  .revive-btn:active { transform: translateY(2px); }
+
+  .hint-row { display: flex; gap: 18px; margin-top: 4px; opacity: 0.85; }
+  .hint-chip {
+    display: flex; align-items: center; gap: 8px; color: #cfe0ff; font-size: 12.5px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    padding: 7px 12px; border-radius: 20px;
+  }
+  .key {
+    display: inline-block; min-width: 18px; padding: 2px 6px; text-align:center;
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 5px; font-weight: 700; font-size: 11px;
+  }
+
+  .pause-badge {
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+    color: #fff; font-size: 13px; background: rgba(0,0,0,0.4); padding: 6px 14px;
+    border-radius: 20px; z-index: 6; pointer-events: none; letter-spacing: 1px;
+  }
+
+  .legal-row { display: flex; gap: 10px; align-items: center; margin-top: 22px; }
+  .legal-link {
+    background: none; border: none; cursor: pointer; color: #88a6d8;
+    font-size: 12.5px; font-weight: 600; text-decoration: underline; padding: 4px 2px;
+    font-family: inherit;
+  }
+  .legal-link:hover { color: #bcd4ff; }
+  .legal-sep { color: #4a5d80; font-size: 12px; }
+
+  .legal-overlay { padding: 0; }
+  .legal-panel {
+    width: min(560px, 92vw); max-height: 82vh; display: flex; flex-direction: column;
+    background: rgba(12,14,28,0.96); border: 1px solid rgba(120,170,255,0.25);
+    border-radius: 18px; padding: 22px 24px; box-sizing: border-box;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .legal-title {
+    font-size: clamp(22px, 6vw, 30px); font-weight: 800; color: #fff; letter-spacing: 2px;
+    margin: 0 0 14px 0; text-align: center;
+  }
+  .legal-body {
+    overflow-y: auto; -webkit-overflow-scrolling: touch; text-align: left;
+    color: #c4d2ec; font-size: 13.5px; line-height: 1.6; padding-right: 6px;
+  }
+  .legal-body p { margin: 0 0 12px 0; }
+  .legal-body b { color: #fff; }
+  .legal-panel .play-btn { margin-top: 16px; align-self: center; }
+
+  /* ---- Mobile portrait / small-phone tuning ---- */
+  @media (max-width: 540px), (orientation: portrait) and (max-height: 760px) {
+    .hud { padding: 10px 12px; }
+    .hud-score { font-size: 22px; }
+    .hud-best { font-size: 12px; margin-top: 2px; }
+    .mute-btn { width: 32px; height: 32px; font-size: 14px; }
+    .hud-right { gap: 6px; }
+    .powerup-row { top: 54px; left: 12px; gap: 6px; }
+    .pw-chip { font-size: 11px; padding: 4px 8px; }
+    .play-btn { padding: 13px 36px; font-size: 17px; }
+    .revive-btn { padding: 9px 24px; font-size: 13px; }
+    .legal-row { flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+    .legal-panel { max-height: 86vh; padding: 18px 16px; }
+    .legal-body { font-size: 12.5px; }
+    /* keep the banner from covering gameplay on tiny screens */
+    #cg-banner { width: 300px; height: 50px; bottom: 4px; }
+  }
+  @media (max-width: 360px) {
+    .hud-score { font-size: 19px; }
+    .title { letter-spacing: 1.5px; }
+    .hint-row { flex-wrap: wrap; justify-content: center; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div class="hud" id="hud" style="display:none;">
+  <div>
+    <div class="hud-score" id="scoreText">0</div>
+    <div class="hud-best" id="bestText">BEST 0</div>
+  </div>
+  <div class="hud-right">
+    <div class="mute-btn" id="muteBtn" title="Mute">🔊</div>
+    <div class="mute-btn" id="menuBtn" title="Pause menu">⏸</div>
+    <div class="hud-combo" id="comboText">x1</div>
+  </div>
+</div>
+<div class="powerup-row" id="powerupRow"></div>
+<div id="cg-banner" style="position:absolute; bottom:8px; left:50%; transform:translateX(-50%); width:320px; height:50px; z-index:4; pointer-events:none;"></div>
+
+<div class="pause-badge" id="pauseBadge" style="display:none;">PAUSED — press P or tap menu</div>
+
+<div class="overlay hidden" id="pauseScreen">
+  <div class="title">PAUSED</div>
+  <div class="subtitle">Take a breather. Your run is on hold.</div>
+  <button class="play-btn" id="resumeBtn">RESUME</button>
+  <button class="revive-btn" id="quitBtn">QUIT TO MENU</button>
+  <div class="legal-row">
+    <button class="legal-link" id="termsBtn2">Terms &amp; Conditions</button>
+    <span class="legal-sep">•</span>
+    <button class="legal-link" id="privacyBtn2">Privacy Policy</button>
+  </div>
+  <div class="hint-row">
+    <div class="hint-chip">⏸ menu / pause</div>
+    <div class="hint-chip"><span class="key">P</span> pause</div>
+  </div>
+</div>
+
+  <div class="overlay" id="startScreen">
+    <div class="title">STARFALL LANES</div>
+    <div class="subtitle">Rocks fall through the rift. <b>Switch lanes</b> to dodge them and scoop up glowing gems. Survive as long as you can — it only gets faster.</div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#c0392b;"></div>Rock — avoid</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ffd76a;"></div>Gem — collect</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#8fd6ff;"></div>Shield / Slow / Magnet</div>
+  </div>
+  <button class="play-btn" id="startBtn">TAP TO START</button>
+  <div class="hint-row">
+    <div class="hint-chip"><span class="key">⎵</span> switch lane</div>
+    <div class="hint-chip">👆 tap / click anywhere</div>
+  </div>
+  <div class="legal-row">
+    <button class="legal-link" id="termsBtn">Terms &amp; Conditions</button>
+    <span class="legal-sep">•</span>
+    <button class="legal-link" id="privacyBtn">Privacy Policy</button>
+  </div>
+</div>
+
+<div class="overlay hidden legal-overlay" id="termsScreen">
+  <div class="legal-panel">
+    <div class="legal-title">TERMS &amp; CONDITIONS</div>
+    <div class="legal-body">
+      <p><b>Last updated:</b> 16 July 2026</p>
+      <p>By playing <b>Starfall Lanes</b> ("the Game"), you agree to the following terms. This is a free-to-play arcade game; no purchase is required to play.</p>
+      <p><b>1. Use of the Game.</b> You agree to use the Game lawfully and not to attempt to reverse-engineer, exploit, or disrupt its operation. Gameplay is provided "as is" without warranty of any kind.</p>
+      <p><b>2. Accounts &amp; Progress.</b> Your best score and progress are stored locally on your device, or, when signed in through the CrazyGames platform, synced to your account. We are not liable for lost progress.</p>
+      <p><b>3. User-Generated Content.</b> The Game does not host user content. Any display name comes from the platform you sign in through.</p>
+      <p><b>4. Limitation of Liability.</b> The creators are not responsible for any indirect or consequential loss arising from use of the Game. The Game may contain links or integrations to third-party platforms (e.g. CrazyGames).</p>
+      <p><b>5. Changes.</b> These terms may be updated at any time. Continued play after changes constitutes acceptance.</p>
+      <p><b>6. Contact.</b> For questions about these terms, contact the developer through the CrazyGames game page.</p>
+    </div>
+    <button class="play-btn" id="termsCloseBtn">CLOSE</button>
+  </div>
+</div>
+
+<div class="overlay hidden legal-overlay" id="privacyScreen">
+  <div class="legal-panel">
+    <div class="legal-title">PRIVACY POLICY</div>
+    <div class="legal-body">
+      <p><b>Last updated:</b> 16 July 2026</p>
+      <p><b>Starfall Lanes</b> respects your privacy. This policy explains what data is handled.</p>
+      <p><b>1. Data We Store.</b> Your local best score and settings (such as mute preference) are saved in your browser's <b>localStorage</b> on your own device. This never leaves your device unless you are signed in to a platform that syncs it.</p>
+      <p><b>2. Platform Data.</b> When played on <b>CrazyGames</b>, the game may access your platform username, avatar, and authentication token solely to personalise your experience. This is governed by CrazyGames' own Privacy Policy.</p>
+      <p><b>3. Analytics &amp; Ads.</b> This basic-launch build does <b>not</b> display ads and does not use third-party advertising trackers. The game calls the platform's ad-block detection only to inform functionality — no ad is ever requested.</p>
+      <p><b>4. Children.</b> The Game is suitable for general audiences. If the platform reports a child account, chat and social features (if any) are disabled automatically.</p>
+      <p><b>5. Your Rights.</b> You may clear your local data at any time via your browser settings. To delete platform-linked data, use the controls provided by that platform.</p>
+      <p><b>6. Contact.</b> Questions? Reach the developer through the CrazyGames game page.</p>
+    </div>
+    <button class="play-btn" id="privacyCloseBtn">CLOSE</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="gameOverScreen">
+  <div class="big-score-label">SCORE</div>
+  <div class="big-score" id="finalScore">0</div>
+  <div class="best-row" id="bestRow">New Best!</div>
+  <button class="play-btn" id="retryBtn">TAP TO RETRY</button>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // =========================================================
+  //  CrazyGames SDK v3 integration layer (all modules, graceful fallback)
+  //  Modules: game, ad, banner, user, data — ads are present in the
+  //  SDK wiring but NOT invoked (basic launch forbids ad requests).
+  // =========================================================
+  var CG = {
+    ready: false,
+    sdk: null,
+    environment: 'local',
+    game: { gameplayStart(){}, gameplayStop(){}, loadingStart(){}, loadingStop(){}, happytime(){},
+            setGameContext(){}, clearGameContext(){}, settings: { muteAudio:false, disableChat:false },
+            isInstantMultiplayer:false, addSettingsChangeListener(){}, inviteLink(){}, inviteParam(){} },
+    ad: { requestAd(){ return Promise.resolve(); }, hasAdblock(){ return Promise.resolve(false); },
+          requestBreaka(){ return Promise.resolve(); } },
+    banner: { requestBanner(){ return Promise.resolve(); }, requestBanners(){ return Promise.resolve(); },
+              clearBanners(){}, refreshBanners(){} },
+    user: { isUserAccountAvailable:false, getUser(){ return Promise.resolve(null); },
+            getToken(){ return Promise.resolve(null); }, getXsollaUser(){ return Promise.resolve(null); },
+            linkAccount(){ return Promise.resolve(null); }, addAuthListener(){}, isChild(){ return Promise.resolve(false); } },
+    data: {
+      getItem(k){ try { return window.localStorage.getItem(k); } catch(e){ return null; } },
+      setItem(k,v){ try { window.localStorage.setItem(k,v); } catch(e){} },
+      removeItem(k){ try { window.localStorage.removeItem(k); } catch(e){} },
+      clear(){ try { window.localStorage.clear(); } catch(e){} }
+    }
+  };
+
+  var currentUser = null;
+  var currentEnvironment = 'local';
+  var bannerContainer = document.getElementById('cg-banner');
+
+  function initSDK(){
+    return new Promise(function(resolve){
+      var settled = false;
+      function finish(){ if (settled) return; settled = true; resolve(); }
+      var timeout = setTimeout(finish, 2500); // local/offline fallback if SDK can't load
+      try {
+        if (window.CrazyGames && window.CrazyGames.SDK && window.CrazyGames.SDK.init) {
+          window.CrazyGames.SDK.init().then(function(){
+            try {
+              var real = window.CrazyGames.SDK;
+              CG.ready = true;
+              CG.sdk = real;
+              CG.environment = (real.environment && real.environment.get && real.environment.get()) || 'crazygames';
+              if (real.game) CG.game = real.game;
+              if (real.ad) CG.ad = real.ad;
+              if (real.banner) CG.banner = real.banner;
+              if (real.user) CG.user = real.user;
+              if (real.data) CG.data = real.data;
+            } catch(e){}
+            clearTimeout(timeout);
+            finish();
+          }).catch(function(){ clearTimeout(timeout); finish(); });
+        } else {
+          clearTimeout(timeout); finish();
+        }
+      } catch(e){ clearTimeout(timeout); finish(); }
+    });
+  }
+
+  function safe(fn){ try { fn(); } catch(e){ /* SDK call failed, ignore */ } }
+
+  // =========================================================
+  //  Canvas setup
+  // =========================================================
+  var canvas = document.getElementById('gameCanvas');
+  var ctx = canvas.getContext('2d');
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  var W = 0, H = 0;
+
+  function resize(){
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // prevent page scroll from space/arrows when embedded
+  window.addEventListener('wheel', function(e){ e.preventDefault(); }, { passive:false });
+  window.addEventListener('keydown', function(e){
+    if (["ArrowUp","ArrowDown"," ","Spacebar"].indexOf(e.key) !== -1) e.preventDefault();
+  });
+
+  // =========================================================
+  //  Audio (procedural, no assets)
+  // =========================================================
+  var audioCtx = null;
+  var userMuted = false;
+  var masterBus = null;
+  var sfxBus = null;
+  function ensureAudio(){
+    if (!audioCtx){
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterBus = audioCtx.createDynamicsCompressor();
+        masterBus.threshold.value = -14;
+        masterBus.knee.value = 24;
+        masterBus.ratio.value = 8;
+        masterBus.attack.value = 0.003;
+        masterBus.release.value = 0.25;
+        masterBus.connect(audioCtx.destination);
+        sfxBus = audioCtx.createGain();
+        sfxBus.gain.value = 0.9;
+        sfxBus.connect(masterBus);
+      }
+      catch(e){ audioCtx = null; }
+    }
+    if (audioCtx && audioCtx.state === 'suspended'){
+      audioCtx.resume();
+    }
+  }
+  document.addEventListener('touchend', function(){
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  });
+
+  function isMuted(){
+    return userMuted || (CG.game.settings && CG.game.settings.muteAudio);
+  }
+
+  function beep(freq, dur, type, vol){
+    if (!audioCtx || isMuted()) return;
+    var t0 = audioCtx.currentTime;
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    var v = (vol!==undefined?vol:0.18);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.linearRampToValueAtTime(v, t0 + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(gain); gain.connect(sfxBus || audioCtx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  }
+  function sfxSwitch(){ beep(520, 0.07, 'square', 0.06); beep(680, 0.05, 'square', 0.04); }
+  function sfxGem(comboMult){
+    var base = 700 + comboMult*40;
+    beep(base, 0.13, 'sine', 0.16);
+    beep(base*1.5, 0.10, 'sine', 0.08);
+  }
+  function sfxHit(){
+    beep(110, 0.4, 'sawtooth', 0.22); beep(70, 0.5, 'sawtooth', 0.18);
+    if (audioCtx && !isMuted()){
+      var t0 = audioCtx.currentTime;
+      var sub = audioCtx.createOscillator(); var sg = audioCtx.createGain();
+      sub.connect(sg); sg.connect(sfxBus || audioCtx.destination);
+      sub.type = 'sine'; sub.frequency.setValueAtTime(90, t0);
+      sub.frequency.exponentialRampToValueAtTime(40, t0 + 0.4);
+      sg.gain.setValueAtTime(0.0001, t0); sg.gain.linearRampToValueAtTime(0.2, t0 + 0.01);
+      sg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
+      sub.start(t0); sub.stop(t0 + 0.42);
+    }
+  }
+  function sfxPower(){ beep(880, 0.2, 'triangle', 0.14); beep(1160, 0.18, 'triangle', 0.10); beep(1480, 0.16, 'triangle', 0.06); }
+  function sfxShieldBreak(){ beep(300, 0.25, 'square', 0.18); beep(180, 0.3, 'square', 0.12); }
+  function sfxLaneOpen(){ beep(523, 0.18, 'triangle', 0.12); beep(659, 0.18, 'triangle', 0.12); beep(784, 0.22, 'triangle', 0.12); }
+  function sfxClick(){ beep(440, 0.05, 'square', 0.05); }
+  function sfxComboBreak(){ beep(300, 0.12, 'sawtooth', 0.10); beep(200, 0.16, 'sawtooth', 0.07); }
+  function sfxGameOver(){
+    if (!audioCtx || isMuted()) return;
+    var seq = [392, 311, 247];
+    var t0 = audioCtx.currentTime;
+    seq.forEach(function(f, i){
+      var o = audioCtx.createOscillator(); var g = audioCtx.createGain();
+      o.connect(g); g.connect(sfxBus || audioCtx.destination);
+      o.type = 'triangle'; o.frequency.setValueAtTime(f, t0 + i*0.16);
+      g.gain.setValueAtTime(0.0001, t0 + i*0.16);
+      g.gain.linearRampToValueAtTime(0.12, t0 + i*0.16 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + i*0.16 + 0.3);
+      o.start(t0 + i*0.16); o.stop(t0 + i*0.16 + 0.32);
+    });
+  }
+
+  // ── Procedural music bed (simple looping arpeggio + bass) ──
+  var musicNodes = null;
+  var musicStep = 0;
+  var musicTempo = 0.32; // seconds per step, eased by speed
+  var musicTimer = 0;
+  var musicScale = [0, 3, 5, 7, 10, 12, 10, 7]; // minor pentatonic-ish, gentle
+  var musicBass = [0, 0, -5, -5];
+  function musicNoteFreq(semi){ return 220 * Math.pow(2, semi/12); }
+  function startMusic(){
+    if (!audioCtx || musicNodes) return;
+    var master = audioCtx.createGain();
+    master.gain.value = 0.0;
+    master.gain.linearRampToValueAtTime(0.10, audioCtx.currentTime + 1.5);
+    master.connect(masterBus || audioCtx.destination);
+    musicNodes = { master: master, padOsc: null };
+    // sustained warm pad (two detuned saws through a lowpass)
+    try {
+      var padFilter = audioCtx.createBiquadFilter();
+      padFilter.type = 'lowpass'; padFilter.frequency.value = 600;
+      padFilter.connect(master);
+      var padGain = audioCtx.createGain();
+      padGain.gain.value = 0.05;
+      padGain.connect(padFilter);
+      var p1 = audioCtx.createOscillator(); p1.type = 'sawtooth'; p1.frequency.value = musicNoteFreq(-12);
+      var p2 = audioCtx.createOscillator(); p2.type = 'sawtooth'; p2.frequency.value = musicNoteFreq(-12) * 1.005;
+      p1.connect(padGain); p2.connect(padGain);
+      p1.start(); p2.start();
+      musicNodes.padOsc = [p1, p2]; musicNodes.padGain = padGain;
+    } catch(e){}
+  }
+  function stopMusic(){
+    if (!musicNodes) return;
+    try {
+      musicNodes.master.gain.cancelScheduledValues(audioCtx.currentTime);
+      musicNodes.master.gain.linearRampToValueAtTime(0.0, audioCtx.currentTime + 0.4);
+      if (musicNodes.padOsc){
+        musicNodes.padOsc.forEach(function(o){ try { o.stop(audioCtx.currentTime + 0.6); } catch(e){} });
+      }
+    } catch(e){}
+    var m = musicNodes;
+    setTimeout(function(){ try { m.master.disconnect(); } catch(e){} }, 600);
+    musicNodes = null;
+  }
+  var _musicNoise = null;
+  function musicTick(dt){
+    if (!audioCtx || isMuted() || !musicNodes) return;
+    musicTimer -= dt;
+    if (musicTimer <= 0){
+      musicTimer = musicTempo;
+      var t0 = audioCtx.currentTime;
+      // arpeggio
+      var semi = musicScale[musicStep % musicScale.length];
+      var osc = audioCtx.createOscillator();
+      var g = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = musicNoteFreq(semi) * 2;
+      g.gain.setValueAtTime(0.0, t0);
+      g.gain.linearRampToValueAtTime(0.5, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + musicTempo * 0.9);
+      osc.connect(g); g.connect(musicNodes.master);
+      osc.start(t0); osc.stop(t0 + musicTempo);
+      // bass on every other step
+      if (musicStep % 2 === 0){
+        var bsemi = musicBass[(musicStep/2) % musicBass.length];
+        var bosc = audioCtx.createOscillator();
+        var bg = audioCtx.createGain();
+        bosc.type = 'sine';
+        bosc.frequency.value = musicNoteFreq(bsemi);
+        bg.gain.setValueAtTime(0.0, t0);
+        bg.gain.linearRampToValueAtTime(0.6, t0 + 0.03);
+        bg.gain.exponentialRampToValueAtTime(0.001, t0 + musicTempo * 1.6);
+        bosc.connect(bg); bg.connect(musicNodes.master);
+        bosc.start(t0); bosc.stop(t0 + musicTempo * 1.8);
+      }
+      // soft hat on off-beats for groove
+      if (musicStep % 2 === 1){
+        if (!_musicNoise){
+          var len = Math.floor(audioCtx.sampleRate * 0.2);
+          _musicNoise = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+          var d = _musicNoise.getChannelData(0);
+          for (var ni = 0; ni < len; ni++) d[ni] = Math.random()*2-1;
+        }
+        var hs = audioCtx.createBufferSource(); hs.buffer = _musicNoise;
+        var hf = audioCtx.createBiquadFilter(); hf.type = 'highpass'; hf.frequency.value = 8000;
+        var hg = audioCtx.createGain();
+        hg.gain.setValueAtTime(0.025, t0);
+        hg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+        hs.connect(hf); hf.connect(hg); hg.connect(musicNodes.master);
+        hs.start(t0); hs.stop(t0 + 0.06);
+      }
+      musicStep++;
+    }
+  }
+
+  function updateMuteIcon(){
+    var btn = document.getElementById('muteBtn');
+    if (btn) btn.textContent = isMuted() ? '🔇' : '🔊';
+  }
+  document.getElementById('muteBtn').addEventListener('click', function(e){
+    e.stopPropagation();
+    userMuted = !userMuted;
+    updateMuteIcon();
+  });
+  // UI click feedback for buttons/overlays
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    if (t && t.closest && t.closest('button, .play-btn, .revive-btn, .legal-link, .mute-btn')){
+      ensureAudio();
+      sfxClick();
+    }
+  }, true);
+
+  // =========================================================
+  //  Game constants / layout
+  // =========================================================
+  // Desktop / landscape keeps the original wide lane spread.
+  // Only small portrait phones switch to a tighter, width-fitted spread.
+  var DESKTOP_LANES = {
+    3: [-0.55, 0, 0.55],
+    4: [-0.68, -0.23, 0.23, 0.68]
+  };
+  var LANE_SETS = {
+    3: DESKTOP_LANES[3].slice(),
+    4: DESKTOP_LANES[4].slice()
+  };
+  var laneCount = 3;
+  var LANE_ANGLES = DESKTOP_LANES[3].slice();
+  var apexX, apexY, playerDist;
+  var safeMargin = 0;
+
+  function isMobilePortrait(){
+    var aspect = W / H;
+    var narrow = Math.min(W, H) < 560;            // small phone
+    var coarse = ('ontouchstart' in window) ||
+                 (navigator.maxTouchPoints > 0);  // touch device
+    return aspect < 1 && (narrow || coarse);
+  }
+
+  function computeLaneAngles(){
+    if (!isMobilePortrait()){
+      // restore the original desktop lanes
+      LANE_SETS[3] = DESKTOP_LANES[3].slice();
+      LANE_SETS[4] = DESKTOP_LANES[4].slice();
+      return;
+    }
+    // narrow portrait: converge lanes so they stay fully on-screen
+    var maxOffset = Math.max(20, W/2 - safeMargin - 6);
+    var maxByWidth = Math.asin(Math.min(0.95, maxOffset / Math.max(60, playerDist)));
+    var spread = maxByWidth * 0.92;
+    LANE_SETS[3] = [-spread, 0, spread];
+    LANE_SETS[4] = [-spread*1.08, -spread*0.36, spread*0.36, spread*1.08];
+  }
+
+  function layout(){
+    var aspect = W / H;
+    safeMargin = Math.max(10, Math.min(W, H) * 0.03);
+    apexX = W/2;
+    apexY = Math.max(H * 0.08, safeMargin + 8);
+    // on portrait, leave room for HUD on top and banner on bottom
+    playerDist = H - apexY - (aspect < 1 ? 70 : 40);
+    playerDist = Math.max(playerDist, H * 0.45);
+    computeLaneAngles();
+    LANE_ANGLES = LANE_SETS[laneCount];
+  }
+  layout();
+  window.addEventListener('resize', layout);
+
+  function laneX(laneIndex, dist){ return apexX + Math.sin(LANE_ANGLES[laneIndex]) * dist; }
+  function laneY(laneIndex, dist){ return apexY + Math.cos(LANE_ANGLES[laneIndex]) * dist; }
+  function lerpAngle(a, b, t){ return a + (b-a)*t; }
+
+  // =========================================================
+  //  State
+  // =========================================================
+  var STATE_START = 0, STATE_PLAY = 1, STATE_OVER = 2;
+  var state = STATE_START;
+  var paused = false;
+
+  var playerLane = 1;
+  var playerAngle = 0;
+  var squashX = 1, squashY = 1;
+  var squashVX = 0, squashVY = 0;
+  var score = 0;
+  var best = 0;
+  var combo = 1;
+  var entities = [];
+  var particles = [];
+  var textParticles = [];
+  var spawnTimer = 0;
+  var spawnInterval = 1.15;
+  var speed = 0;
+  var baseSpeed = 0;
+  var elapsed = 0;
+  var shake = 0;
+  var timeScale = 1;
+  var deathTimer = 0;
+  var flashAlpha = 0;
+  var flashColor = [255, 60, 40];
+  var beatFreq = 1.7;
+  var laneUnlockedAt4 = false;
+  var hitStop = 0;
+
+  var shieldActive = false;
+  var slowTimer = 0;
+  var magnetTimer = 0;
+
+  function resetGame(){
+    laneCount = 3;
+    LANE_ANGLES = LANE_SETS[3];
+    laneUnlockedAt4 = false;
+    playerLane = 1;
+    playerAngle = LANE_ANGLES[1];
+    score = 0;
+    combo = 1;
+    entities = [];
+    particles = [];
+    textParticles = [];
+    spawnTimer = 0;
+    spawnInterval = 1.15;
+    baseSpeed = H * 0.34;
+    elapsed = 0;
+    shake = 0;
+    timeScale = 1;
+    deathTimer = 0;
+    flashAlpha = 0;
+    shieldActive = false;
+    slowTimer = 0;
+    magnetTimer = 0;
+  }
+
+  // =========================================================
+  //  Input
+  // =========================================================
+  function switchLane(){
+    if (state === STATE_START){ startGame(); return; }
+    if (state === STATE_OVER){ return; }
+    if (paused) return;
+    playerLane = (playerLane + 1) % laneCount;
+    // directional squash: stretch along travel, squash perpendicular
+    squashVX += (playerLane % 2 === 0 ? 2.2 : -2.2);
+    squashVY -= 1.4;
+    shake = Math.max(shake, 2);
+    sfxSwitch();
+  }
+
+  function togglePause(forceState){
+    if (state !== STATE_PLAY && forceState !== true) return;
+    paused = (typeof forceState === 'boolean') ? forceState : !paused;
+    document.getElementById('pauseBadge').style.display = paused ? 'block' : 'none';
+    document.getElementById('pauseScreen').classList.toggle('hidden', !paused);
+    if (paused) safe(function(){ CG.game.gameplayStop(); });
+    else safe(function(){ CG.game.gameplayStart(); });
+  }
+
+  window.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' || e.code === 'Enter' || e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight'){
+      e.preventDefault();
+      ensureAudio();
+      if (state === STATE_OVER){
+        if (e.key === 'Enter' || e.code === 'Enter' || e.code === 'Space'){ startGame(); return; }
+      }
+      switchLane();
+    } else if (e.key === 'p' || e.key === 'P' || e.code === 'KeyP'){
+      togglePause();
+    }
+  });
+
+  canvas.addEventListener('pointerdown', function(e){
+    e.preventDefault();
+    ensureAudio();
+    switchLane();
+  });
+  canvas.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+  document.getElementById('startBtn').addEventListener('click', function(e){
+    e.stopPropagation(); ensureAudio(); startGame();
+  });
+  document.getElementById('retryBtn').addEventListener('click', function(e){
+    e.stopPropagation(); ensureAudio(); startGame();
+  });
+  document.getElementById('menuBtn').addEventListener('click', function(e){
+    e.stopPropagation(); ensureAudio(); togglePause(true);
+  });
+  document.getElementById('resumeBtn').addEventListener('click', function(e){
+    e.stopPropagation(); ensureAudio(); togglePause(false);
+  });
+  document.getElementById('quitBtn').addEventListener('click', function(e){
+    e.stopPropagation(); ensureAudio(); quitToMenu();
+  });
+  document.getElementById('termsBtn').addEventListener('click', function(e){
+    e.stopPropagation(); document.getElementById('termsScreen').classList.remove('hidden');
+  });
+  document.getElementById('privacyBtn').addEventListener('click', function(e){
+    e.stopPropagation(); document.getElementById('privacyScreen').classList.remove('hidden');
+  });
+  document.getElementById('termsBtn2').addEventListener('click', function(e){
+    e.stopPropagation(); document.getElementById('termsScreen').classList.remove('hidden');
+  });
+  document.getElementById('privacyBtn2').addEventListener('click', function(e){
+    e.stopPropagation(); document.getElementById('privacyScreen').classList.remove('hidden');
+  });
+  document.getElementById('termsCloseBtn').addEventListener('click', function(e){
+    e.stopPropagation(); document.getElementById('termsScreen').classList.add('hidden');
+  });
+  document.getElementById('privacyCloseBtn').addEventListener('click', function(e){
+    e.stopPropagation(); document.getElementById('privacyScreen').classList.add('hidden');
+  });
+
+  function startGame(){
+    resetGame();
+    state = STATE_PLAY;
+    document.getElementById('startScreen').classList.add('hidden');
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('pauseScreen').classList.add('hidden');
+    document.getElementById('pauseBadge').style.display = 'none';
+    paused = false;
+    document.getElementById('hud').style.display = 'flex';
+    updateMuteIcon();
+    ensureAudio();
+    startMusic();
+    safe(function(){ CG.game.gameplayStart(); });
+    safe(function(){ CG.game.loadingStop(); });
+    safe(function(){ CG.game.setGameContext({ level: 1, lane: playerLane, score: 0, mode: 'endless' }); });
+    // refresh banner on gameplay start (no-op off-platform)
+    safe(function(){ if (CG.banner && CG.banner.refreshBanners) CG.banner.refreshBanners(); });
+  }
+
+  function quitToMenu(){
+    state = STATE_START;
+    paused = false;
+    document.getElementById('pauseScreen').classList.add('hidden');
+    document.getElementById('pauseBadge').style.display = 'none';
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('startScreen').classList.remove('hidden');
+    safe(function(){ CG.game.gameplayStop(); });
+    safe(function(){ CG.game.clearGameContext(); });
+    stopMusic();
+  }
+
+  function endGame(){
+    state = STATE_OVER;
+    var isNewBest = score > best;
+    if (isNewBest){
+      best = score;
+      safe(function(){ CG.data.setItem('nebulaDodgeBest', String(Math.floor(best))); });
+      safe(function(){ CG.game.happytime(); }); // sparingly: only on genuine new best
+    }
+    sfxHit();
+    sfxGameOver();
+    shake = 28;
+    flashAlpha = 0.9;
+    flashColor = [255, 60, 40];
+    timeScale = 0.22;
+    deathTimer = 0.55;
+    hitStop = 0.12; // freeze-frame juice on death
+    squashVY -= 2.5; squashVX += 2.0;
+    // extra shards burst
+    spawnBurst(apexX + Math.sin(playerAngle)*playerDist, apexY + Math.cos(playerAngle)*playerDist, '#8fd6ff', 26, 220, true);
+    safe(function(){ CG.game.gameplayStop(); });
+    safe(function(){ CG.game.clearGameContext(); });
+    stopMusic();
+  }
+
+  function showGameOver(){
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('finalScore').textContent = Math.floor(score);
+    var bestRow = document.getElementById('bestRow');
+    if (score >= best && score > 0){
+      bestRow.textContent = 'New Best!';
+    } else {
+      bestRow.textContent = 'Best ' + Math.floor(best);
+    }
+    document.getElementById('gameOverScreen').classList.remove('hidden');
+  }
+
+  // =========================================================
+  //  Particles / floating text
+  // =========================================================
+  function spawnBurst(x, y, color, count, spd, shard){
+    for (var i=0;i<count;i++){
+      var a = Math.random()*Math.PI*2;
+      var s = (0.4 + Math.random()*0.6) * spd;
+      particles.push({
+        x:x, y:y,
+        vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+        life: 0.5 + Math.random()*0.4, maxLife: 0.5 + Math.random()*0.4,
+        size: 2 + Math.random()*3, color: color, shard: !!shard, rot: Math.random()*Math.PI*2
+      });
+    }
+  }
+  function spawnText(x, y, text, color){
+    textParticles.push({ x:x, y:y, text:text, life:0.9, maxLife:0.9, color:color, vy:-42 });
+  }
+
+  // =========================================================
+  //  Spawning
+  // =========================================================
+  function spawnWave(){
+    var t = elapsed;
+    // unlock 4th lane after 30s of survival
+    if (!laneUnlockedAt4 && t > 30){
+      laneUnlockedAt4 = true;
+      laneCount = 4;
+      LANE_ANGLES = LANE_SETS[4];
+      // remap player lane roughly to keep same relative side
+      playerLane = Math.min(playerLane + 1, 3);
+      spawnText(apexX, apexY + playerDist*0.4, 'NEW LANE OPENED', '#8fd6ff');
+      sfxLaneOpen();
+      shake = Math.max(shake, 10);
+      spawnBurst(apexX, apexY + playerDist*0.4, '#8fd6ff', 14, 150);
+    }
+
+    // rare special waves take priority (never combined with a normal rock wave)
+    var specialRoll = Math.random();
+    if (t > 25 && specialRoll < 0.10){
+      spawnSplitterWave(); return;
+    }
+    if (t > 14 && specialRoll < 0.24){
+      spawnPulseWave(); return;
+    }
+    if (t > 9 && specialRoll < 0.36){
+      spawnSwapWave(); return;
+    }
+
+    // power-up drop (rare, independent lane, never on top of a rock)
+    var lanesArr = [];
+    for (var i=0;i<laneCount;i++) lanesArr.push(i);
+    shuffle(lanesArr);
+
+    var maxRocks = laneCount - 1; // always leave >=1 lane open
+    var numRocks = 1;
+    if (t > 20 && Math.random() < 0.45) numRocks = Math.min(2, maxRocks);
+    if (t > 40 && laneCount === 4 && Math.random() < 0.35) numRocks = Math.min(3, maxRocks);
+
+    var rockLanes = lanesArr.slice(0, numRocks);
+    var freeLanes = lanesArr.slice(numRocks);
+
+    rockLanes.forEach(function(l){
+      entities.push({lane:l, dist:0, type:'rock', rot: Math.random()*Math.PI*2, rotSpeed: (Math.random()-0.5)*3});
+    });
+
+    if (freeLanes.length){
+      var roll = Math.random();
+      if (roll < 0.42){
+        var gl = freeLanes[Math.floor(Math.random()*freeLanes.length)];
+        entities.push({lane:gl, dist:0, type:'gem', rot:0, rotSpeed: 2.4});
+      } else if (roll < 0.48 && t > 10){
+        var pl = freeLanes[Math.floor(Math.random()*freeLanes.length)];
+        var pTypes = ['pw_shield','pw_slow','pw_magnet'];
+        var pType = pTypes[Math.floor(Math.random()*pTypes.length)];
+        entities.push({lane:pl, dist:0, type:pType, rot:0, rotSpeed: 1.6});
+      }
+    }
+  }
+
+  function spawnSplitterWave(){
+    var lanesArr = [];
+    for (var i=0;i<laneCount;i++) lanesArr.push(i);
+    shuffle(lanesArr);
+    var homeLane = lanesArr[0];
+    entities.push({lane:homeLane, dist:0, type:'splitter', rot:0, rotSpeed: 1.1, splitAt: playerDist*0.68, splitDone:false});
+  }
+
+  function spawnSwapWave(){
+    var lanesArr = [];
+    for (var i=0;i<laneCount;i++) lanesArr.push(i);
+    shuffle(lanesArr);
+    var fromLane = lanesArr[0];
+    var toLane = lanesArr[1];
+    entities.push({lane:fromLane, originLane:fromLane, targetLane:toLane, dist:0, type:'swap', rot:0, rotSpeed:2,
+      swapAt: playerDist*0.45, swapDone:false});
+    // guarantee at least one lane stays open the whole time: pick a third lane (if exists) for a gem
+    if (laneCount > 2 && Math.random() < 0.5){
+      var freeLane = lanesArr[2] !== undefined ? lanesArr[2] : lanesArr[1];
+      entities.push({lane:freeLane, dist:0, type:'gem', rot:0, rotSpeed:2.4});
+    }
+  }
+
+  function spawnPulseWave(){
+    var lanesArr = [];
+    for (var i=0;i<laneCount;i++) lanesArr.push(i);
+    shuffle(lanesArr);
+    var lane = lanesArr[0];
+    entities.push({lane:lane, dist:0, type:'pulse', rot:0, rotSpeed:1.4, phase: Math.random() < 0.5 ? 0 : 1});
+  }
+
+  function shuffle(arr){
+    for (var i=arr.length-1;i>0;i--){
+      var j = Math.floor(Math.random()*(i+1));
+      var tmp = arr[i]; arr[i]=arr[j]; arr[j]=tmp;
+    }
+    return arr;
+  }
+
+  function pulseIsSolid(e, t){
+    return Math.floor(t*beatFreq + e.phase) % 2 === 0;
+  }
+
+  // =========================================================
+  //  Power-up effects
+  // =========================================================
+  function applyPowerup(type, x, y){
+    sfxPower();
+    if (type === 'pw_shield'){
+      shieldActive = true;
+      spawnText(x, y, 'SHIELD', '#8fd6ff');
+      spawnBurst(x, y, '#8fd6ff', 12, 140);
+      triggerFlash(143, 214, 255, 0.3);
+    } else if (type === 'pw_slow'){
+      slowTimer = 3.5;
+      spawnText(x, y, 'SLOW-MO', '#b388ff');
+      spawnBurst(x, y, '#b388ff', 12, 140);
+      triggerFlash(179, 136, 255, 0.3);
+    } else if (type === 'pw_magnet'){
+      magnetTimer = 4.5;
+      spawnText(x, y, 'MAGNET', '#7dffb3');
+      spawnBurst(x, y, '#7dffb3', 12, 140);
+      triggerFlash(125, 255, 179, 0.3);
+    }
+    refreshPowerupHUD();
+  }
+
+  function refreshPowerupHUD(){
+    var row = document.getElementById('powerupRow');
+    var html = '';
+    if (shieldActive) html += '<div class="pw-chip">🛡 Shield</div>';
+    if (slowTimer > 0) html += '<div class="pw-chip">🐌 ' + slowTimer.toFixed(1) + 's</div>';
+    if (magnetTimer > 0) html += '<div class="pw-chip">🧲 ' + magnetTimer.toFixed(1) + 's</div>';
+    row.innerHTML = html;
+  }
+
+  // =========================================================
+  //  Update
+  // =========================================================
+  var lastTime = performance.now();
+  function update(rawDt){
+    var dt = rawDt * timeScale;
+    elapsed += rawDt;
+
+    if (state === STATE_OVER && deathTimer > 0){
+      deathTimer -= rawDt;
+      timeScale = Math.max(0.22, timeScale + rawDt*0.6);
+      if (deathTimer <= 0){
+        timeScale = 1;
+        showGameOver();
+      }
+    }
+
+    if (shake > 0) shake = Math.max(0, shake - rawDt*40);
+    if (flashAlpha > 0) flashAlpha = Math.max(0, flashAlpha - rawDt*1.8);
+
+    var targetAngle = LANE_ANGLES[playerLane];
+    playerAngle = lerpAngle(playerAngle, targetAngle, Math.min(1, dt*10));
+
+    // squash/stretch spring (overshoot bounce on lane-switch & impacts)
+    var stiff = 220, damp = 14;
+    squashVX += (-(squashX - 1) * stiff - squashVX * damp) * rawDt;
+    squashVY += (-(squashY - 1) * stiff - squashVY * damp) * rawDt;
+    squashX += squashVX * rawDt;
+    squashY += squashVY * rawDt;
+
+    if (state === STATE_PLAY && !paused){
+
+      if (slowTimer > 0){ slowTimer = Math.max(0, slowTimer - rawDt); }
+      if (magnetTimer > 0){ magnetTimer = Math.max(0, magnetTimer - rawDt); }
+
+      // difficulty ramp stays aggressive even with powerups available -
+      // slow-mo only eases the *effective* speed briefly, base ramp keeps climbing
+      var rampSpeed = baseSpeed + Math.min(elapsed, 70) * (H*0.0145);
+      speed = slowTimer > 0 ? rampSpeed * 0.62 : rampSpeed;
+
+      // music intensifies with speed
+      musicTempo = Math.max(0.16, 0.32 - elapsed * 0.0022);
+      musicTick(rawDt);
+
+      spawnInterval = Math.max(0.46, 1.15 - elapsed*0.011);
+
+      spawnTimer -= dt;
+      if (spawnTimer <= 0){
+        spawnWave();
+        spawnTimer = spawnInterval;
+      }
+
+      score += dt * 6;
+
+      for (var i = entities.length - 1; i >= 0; i--){
+        var e = entities[i];
+        e.prevDist = (e.prevDist === undefined) ? e.dist : e.dist;
+        var prevDist = e.prevDist;
+        e.dist += speed * dt;
+        e.rot += e.rotSpeed * dt;
+
+        // splitter logic
+        if (e.type === 'splitter' && !e.splitDone && e.dist >= e.splitAt){
+          e.splitDone = true;
+          var lanes2 = [];
+          for (var k=0;k<laneCount;k++) if (k !== e.lane) lanes2.push(k);
+          shuffle(lanes2);
+          var childLanes = lanes2.slice(0, Math.min(2, lanes2.length));
+          childLanes.forEach(function(cl){
+            entities.push({lane:cl, dist:e.dist, type:'rock', rot:Math.random()*6, rotSpeed:(Math.random()-0.5)*4});
+          });
+          var sx = laneX(e.lane, e.dist), sy = laneY(e.lane, e.dist);
+          spawnBurst(sx, sy, '#ff8a65', 10, 120, true);
+        }
+
+        // swap logic
+        if (e.type === 'swap' && !e.swapDone && e.dist >= e.swapAt){
+          e.swapDone = true;
+          e.lane = e.targetLane;
+        }
+
+        var isGhostPulse = (e.type === 'pulse') && !pulseIsSolid(e, elapsed);
+
+        // Resolve the moment the entity crosses the player line this frame,
+        // regardless of speed (prevents fast rocks skipping the hit window).
+        var justPassed = !e.resolved && prevDist < playerDist && e.dist >= playerDist;
+        if (justPassed){
+          e.resolved = true;
+          var px = laneX(e.lane, playerDist), py = laneY(e.lane, playerDist);
+          var isHazard = (e.type === 'rock' || e.type === 'swap' || (e.type === 'pulse' && !isGhostPulse));
+          var isCollectible = (e.type === 'gem');
+          var isPowerup = (e.type === 'pw_shield' || e.type === 'pw_slow' || e.type === 'pw_magnet');
+
+          var onPlayerLane = (e.lane === playerLane);
+          var magnetGrab = (!onPlayerLane && magnetTimer > 0 && isCollectible && Math.abs(e.lane - playerLane) === 1);
+
+          if ((onPlayerLane && isHazard)){
+            if (shieldActive){
+              shieldActive = false;
+              spawnBurst(px, py, '#8fd6ff', 18, 180, true);
+              spawnText(px, py, 'SHIELD BROKEN', '#8fd6ff');
+              sfxShieldBreak();
+              triggerFlash(143, 214, 255, 0.4);
+              shake = Math.max(shake, 6);
+              refreshPowerupHUD();
+            } else {
+              endGame();
+            }
+          } else if (onPlayerLane && isCollectible){
+            score += 15 * combo;
+            combo = Math.min(combo + 1, 20);
+            spawnBurst(px, py, '#ffd76a', 14, 160);
+            spawnText(px, py, '+' + (15*combo), '#ffd76a');
+            sfxGem(combo);
+            showCombo();
+            hitStop = Math.max(hitStop, 0.04 + Math.min(0.05, combo*0.003));
+            squashVY += 1.2; squashVX -= 0.8;
+            triggerFlash(255, 240, 180, 0.22 + Math.min(0.2, combo*0.01));
+            entities.splice(i,1);
+            continue;
+          } else if (magnetGrab){
+            score += 15 * combo;
+            combo = Math.min(combo + 1, 20);
+            var mx = laneX(playerLane, playerDist);
+            spawnBurst(mx, py, '#7dffb3', 10, 140);
+            spawnText(mx, py, '+' + (15*combo), '#7dffb3');
+            sfxGem(combo);
+            showCombo();
+            triggerFlash(200, 255, 200, 0.22);
+            entities.splice(i,1);
+            continue;
+          } else if (onPlayerLane && isPowerup){
+            applyPowerup(e.type, px, py);
+            entities.splice(i,1);
+            continue;
+          } else {
+            if (isCollectible && !magnetGrab){
+              if (combo > 1){ triggerFlash(255, 90, 70, 0.18); sfxComboBreak(); }
+              combo = 1;
+            }
+          }
+        }
+
+        if (e.dist > playerDist * 1.35){
+          entities.splice(i,1);
+        }
+      }
+    }
+
+    for (var p = particles.length - 1; p >= 0; p--){
+      var pt = particles[p];
+      pt.life -= rawDt;
+      pt.x += pt.vx * rawDt;
+      pt.y += pt.vy * rawDt;
+      pt.vx *= 0.94; pt.vy *= 0.94;
+      if (pt.life <= 0) particles.splice(p,1);
+    }
+    for (var tp = textParticles.length - 1; tp >= 0; tp--){
+      var t2 = textParticles[tp];
+      t2.life -= rawDt;
+      t2.y += t2.vy * rawDt;
+      if (t2.life <= 0) textParticles.splice(tp,1);
+    }
+  }
+
+  var comboShowTimer = 0;
+  function showCombo(){
+    var el = document.getElementById('comboText');
+    el.textContent = 'x' + combo;
+    el.classList.add('show');
+    comboShowTimer = 1.1;
+  }
+
+  // =========================================================
+  //  Drawing
+  // =========================================================
+  function drawBackgroundStars(){
+    ctx.fillStyle = '#05050c';
+    ctx.fillRect(0,0,W,H);
+  }
+
+  var starField = null;
+  var nebulaClouds = null;
+  function buildStarField(){
+    starField = [];
+    var n = Math.floor((W*H)/9000);
+    for (var i=0;i<n;i++){
+      var layer = Math.random() < 0.2 ? 2 : (Math.random() < 0.4 ? 1 : 0);
+      starField.push({
+        x: Math.random()*W, y: Math.random()*H, r: (Math.random()*1.2+0.3) * (1 + layer*0.5),
+        tw: Math.random()*Math.PI*2, layer: layer,
+        drift: 6 + layer*14 + Math.random()*8
+      });
+    }
+    nebulaClouds = [];
+    var cCount = 6;
+    for (var c=0;c<cCount;c++){
+      nebulaClouds.push({
+        x: Math.random()*W, y: Math.random()*H, r: 120 + Math.random()*200,
+        hue: c % 2 === 0 ? '90,120,255' : '180,110,255', speed: 3 + Math.random()*4, phase: Math.random()*1000,
+        drift: 4 + Math.random()*6
+      });
+    }
+  }
+  buildStarField();
+  window.addEventListener('resize', buildStarField);
+
+  function drawNebula(t){
+    var spd = (state === STATE_PLAY && !paused) ? (0.4 + Math.min(1.2, speed/(baseSpeed*1.5))) : 0.3;
+    for (var i=0;i<nebulaClouds.length;i++){
+      var c = nebulaClouds[i];
+      c.y += c.drift * spd * 0.016;
+      if (c.y - c.r > H) { c.y = -c.r; c.x = Math.random()*W; }
+      var dx = Math.sin(t*0.00015 + c.phase) * 40;
+      var dy = Math.cos(t*0.0001 + c.phase) * 30;
+      var g = ctx.createRadialGradient(c.x+dx, c.y+dy, 0, c.x+dx, c.y+dy, c.r);
+      var pulse = 0.10 + 0.04*Math.sin(t*0.0006 + c.phase);
+      g.addColorStop(0, 'rgba('+c.hue+','+pulse.toFixed(3)+')');
+      g.addColorStop(1, 'rgba('+c.hue+',0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(c.x+dx, c.y+dy, c.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawStars(t){
+    var spd = (state === STATE_PLAY && !paused) ? (0.4 + Math.min(1.2, speed/(baseSpeed*1.5))) : 0.2;
+    for (var i=0;i<starField.length;i++){
+      var s = starField[i];
+      s.y += s.drift * spd * 0.016;
+      if (s.y - s.r > H){ s.y = -s.r; s.x = Math.random()*W; }
+      var a = (0.3 + 0.4*Math.sin(t*0.001 + s.tw)) * (0.6 + s.layer*0.2);
+      ctx.fillStyle = 'rgba(200,220,255,'+a.toFixed(3)+')';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawLanes(){
+    var beat = musicNodes ? (0.5 + 0.5*Math.sin(musicStep * Math.PI + (1 - musicTimer/musicTempo)*Math.PI)) : 0.5;
+    for (var l=0;l<laneCount;l++){
+      var x2 = laneX(l, Math.max(H,W)*1.4);
+      var y2 = laneY(l, Math.max(H,W)*1.4);
+      var grad = ctx.createLinearGradient(apexX, apexY, x2, y2);
+      var active = (state===STATE_PLAY && l===playerLane);
+      var glow = active ? (0.16 + beat*0.10) : (0.10 + beat*0.04);
+      grad.addColorStop(0, 'rgba(120,170,255,0.05)');
+      grad.addColorStop(0.5, active ? 'rgba(255,215,106,'+glow.toFixed(3)+')' : 'rgba(120,170,255,'+glow.toFixed(3)+')');
+      grad.addColorStop(1, active ? 'rgba(255,215,106,0.05)' : 'rgba(120,170,255,0.02)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 40 + beat*6;
+      ctx.beginPath();
+      ctx.moveTo(apexX, apexY);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+  }
+
+  function drawApex(t){
+    // Only show the apex glow on the menu/start screen so it doesn't block gameplay.
+    if (state !== STATE_START) return;
+    var pulse = 6 + Math.sin(t*0.003)*3;
+    var g = ctx.createRadialGradient(apexX, apexY, 0, apexX, apexY, 46+pulse);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(0.35, 'rgba(140,190,255,0.55)');
+    g.addColorStop(1, 'rgba(140,190,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(apexX, apexY, 46+pulse, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawRock(e, color1, color2, glow){
+    var x = laneX(e.lane, e.dist);
+    var y = laneY(e.lane, e.dist);
+    var size = 15 + (e.dist/playerDist)*13;
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(e.rot);
+    ctx.beginPath();
+    var spikes = 7;
+    for (var i=0;i<spikes;i++){
+      var ang = (i/spikes)*Math.PI*2;
+      var r = size * (0.72 + (i%2===0?0.3:0));
+      var px = Math.cos(ang)*r, py = Math.sin(ang)*r;
+      if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath();
+    var g = ctx.createRadialGradient(0,0,0,0,0,size*1.4);
+    g.addColorStop(0, color1);
+    g.addColorStop(0.6, color2);
+    g.addColorStop(1, '#5c1a12');
+    ctx.fillStyle = g;
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 14;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSwapRock(e){
+    var flashing = !e.swapDone && (e.dist > e.swapAt - 60) && (e.dist < e.swapAt);
+    if (flashing && Math.floor(elapsed*14) % 2 === 0){
+      drawRock(e, '#fff6cf', '#ffb238', 'rgba(255,200,80,0.9)');
+    } else {
+      drawRock(e, '#c58bff', '#7a3cc9', 'rgba(180,120,255,0.6)');
+    }
+  }
+
+  function drawPulseRock(e){
+    var solid = pulseIsSolid(e, elapsed);
+    if (solid){
+      drawRock(e, '#ff8a65', '#c0392b', 'rgba(255,90,60,0.6)');
+    } else {
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      drawRock(e, '#ff8a65', '#c0392b', 'rgba(255,90,60,0.3)');
+      ctx.restore();
+    }
+  }
+
+  function drawGem(e){
+    var x = laneX(e.lane, e.dist);
+    var y = laneY(e.lane, e.dist);
+    var size = 11 + (e.dist/playerDist)*8;
+    var pulse = 1 + Math.sin(elapsed*5 + e.rot)*0.12;
+    size *= pulse;
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(e.rot);
+    ctx.beginPath();
+    ctx.moveTo(0,-size); ctx.lineTo(size*0.7,0); ctx.lineTo(0,size); ctx.lineTo(-size*0.7,0);
+    ctx.closePath();
+    var g = ctx.createRadialGradient(0,0,0,0,0,size*1.5);
+    g.addColorStop(0, '#fff6cf');
+    g.addColorStop(0.5, '#ffd76a');
+    g.addColorStop(1, '#b9860e');
+    ctx.fillStyle = g;
+    ctx.shadowColor = 'rgba(255,215,106,'+(0.85*pulse).toFixed(2)+')';
+    ctx.shadowBlur = 18*pulse;
+    ctx.fill();
+    // sparkle highlight
+    ctx.globalAlpha = 0.6 + 0.4*Math.sin(elapsed*8 + e.rot);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(-size*0.18, -size*0.18, size*0.12, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPowerup(e){
+    var x = laneX(e.lane, e.dist);
+    var y = laneY(e.lane, e.dist);
+    var size = 12 + (e.dist/playerDist)*8;
+    var colors = { pw_shield:'#8fd6ff', pw_slow:'#b388ff', pw_magnet:'#7dffb3' };
+    var icon = { pw_shield:'🛡', pw_slow:'🐌', pw_magnet:'🧲' };
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.beginPath();
+    ctx.arc(0,0,size, 0, Math.PI*2);
+    var g = ctx.createRadialGradient(0,0,0,0,0,size*1.6);
+    g.addColorStop(0, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.5, colors[e.type]);
+    g.addColorStop(1, 'rgba(255,255,255,0.05)');
+    ctx.fillStyle = g;
+    ctx.shadowColor = colors[e.type];
+    ctx.shadowBlur = 20;
+    ctx.fill();
+    ctx.font = (size*1.2) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 0;
+    ctx.fillText(icon[e.type], 0, 1);
+    ctx.restore();
+  }
+
+  function drawPlayer(){
+    var x = apexX + Math.sin(playerAngle) * playerDist;
+    var y = apexY + Math.cos(playerAngle) * playerDist;
+    for (var i=1;i<=5;i++){
+      var td = playerDist - i*10;
+      var tx = apexX + Math.sin(playerAngle) * td;
+      var ty = apexY + Math.cos(playerAngle) * td;
+      ctx.beginPath();
+      ctx.arc(tx,ty, 10 - i*1.6, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(120,190,255,' + (0.12 - i*0.02) + ')';
+      ctx.fill();
+    }
+    if (shieldActive){
+      ctx.beginPath();
+      ctx.arc(x, y, 26 + Math.sin(elapsed*6)*2, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(143,214,255,0.75)';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = 'rgba(143,214,255,0.9)';
+      ctx.shadowBlur = 14;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    ctx.save();
+    ctx.translate(x,y);
+    var rot = Math.atan2(x-apexX, y-apexY);
+    ctx.rotate(rot);
+    ctx.scale(squashX, squashY);
+    ctx.beginPath();
+    ctx.moveTo(0,-20);
+    ctx.lineTo(13,14);
+    ctx.lineTo(0,7);
+    ctx.lineTo(-13,14);
+    ctx.closePath();
+    var g = ctx.createLinearGradient(0,-20,0,14);
+    g.addColorStop(0, '#e8f6ff');
+    g.addColorStop(1, '#6fb8ff');
+    ctx.fillStyle = g;
+    ctx.shadowColor = 'rgba(120,190,255,0.9)';
+    ctx.shadowBlur = 20;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawParticles(){
+    for (var i=0;i<particles.length;i++){
+      var p = particles[i];
+      var a = Math.max(0, p.life / p.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      if (p.shard){
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot + p.life*4);
+        ctx.beginPath();
+        ctx.moveTo(-p.size, -p.size);
+        ctx.lineTo(p.size, -p.size*0.4);
+        ctx.lineTo(-p.size*0.3, p.size);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawTextParticles(){
+    for (var i=0;i<textParticles.length;i++){
+      var t = textParticles[i];
+      var a = Math.max(0, t.life / t.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = t.color;
+      ctx.font = '700 15px Segoe UI, Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(t.text, t.x, t.y);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Polish layer: additive glow + trails + vignette ──
+  var playerTrail = [];
+  var speedStreaks = [];
+
+  function drawSpeedStreaks(){
+    if (state !== STATE_PLAY) return;
+    var intensity = Math.max(0, Math.min(1, (speed / (baseSpeed*2)) - 0.35));
+    if (intensity <= 0) return;
+    if (slowTimer > 0) intensity *= 0.4;
+    // spawn streaks from the apex outward
+    if (Math.random() < intensity * 0.6){
+      var ang = Math.random() * Math.PI * 2;
+      var ex = apexX + Math.cos(ang) * (40 + Math.random()*60);
+      var ey = apexY + Math.sin(ang) * (40 + Math.random()*60);
+      speedStreaks.push({ x: ex, y: ey, ang: ang, len: 30 + Math.random()*50, life: 1, spd: 600 + Math.random()*400 });
+    }
+    for (var i = speedStreaks.length - 1; i >= 0; i--){
+      var s = speedStreaks[i];
+      s.life -= 0.04;
+      if (s.life <= 0){ speedStreaks.splice(i,1); continue; }
+      var vx = Math.cos(s.ang) * s.spd * 0.016;
+      var vy = Math.sin(s.ang) * s.spd * 0.016;
+      ctx.strokeStyle = 'rgba(150,200,255,' + (s.life * 0.25 * intensity).toFixed(3) + ')';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(s.x - vx*(s.len/12), s.y - vy*(s.len/12));
+      ctx.stroke();
+      s.x += vx; s.y += vy;
+    }
+  }
+
+  function drawVignette(){
+    var g = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.35, W/2, H/2, Math.max(W,H)*0.75);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function triggerFlash(r, g, b, a){
+    flashColor = [r, g, b];
+    flashAlpha = Math.max(flashAlpha, a);
+  }
+
+  function draw(t){
+    ctx.save();
+    if (shake > 0){
+      ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+    drawBackgroundStars();
+    drawNebula(t);
+    drawStars(t);
+    drawLanes();
+    drawApex(t);
+
+    // additive glow pass for gameplay elements
+    ctx.globalCompositeOperation = 'lighter';
+    for (var i=0;i<entities.length;i++){
+      var e = entities[i];
+      if (e.type === 'rock') drawRock(e, '#ff8a65', '#c0392b', 'rgba(255,90,60,0.6)');
+      else if (e.type === 'splitter') drawRock(e, '#ff6b4a', '#8e2a1a', 'rgba(255,90,60,0.85)');
+      else if (e.type === 'swap') drawSwapRock(e);
+      else if (e.type === 'pulse') drawPulseRock(e);
+      else if (e.type === 'gem') drawGem(e);
+      else if (e.type.indexOf('pw_') === 0) drawPowerup(e);
+    }
+    if (state !== STATE_START) drawPlayer();
+    ctx.globalCompositeOperation = 'lighter';
+    drawSpeedStreaks();
+    drawParticles();
+    ctx.globalCompositeOperation = 'source-over';
+    drawTextParticles();
+
+    ctx.restore();
+
+    if (flashAlpha > 0){
+      var fc = flashColor;
+      ctx.fillStyle = 'rgba(' + fc[0] + ',' + fc[1] + ',' + fc[2] + ',' + (flashAlpha*0.35).toFixed(3) + ')';
+      ctx.fillRect(0,0,W,H);
+    }
+    if (slowTimer > 0){
+      ctx.fillStyle = 'rgba(120,90,200,' + Math.min(0.18, slowTimer*0.02) + ')';
+      ctx.fillRect(0,0,W,H);
+    }
+    drawVignette();
+  }
+
+  // player motion trail (drawn in additive pass via its own hook)
+  var _origDrawPlayer = drawPlayer;
+  drawPlayer = function(){
+    if (state === STATE_PLAY && !paused){
+      var px = apexX + Math.sin(playerAngle) * playerDist;
+      var py = apexY + Math.cos(playerAngle) * playerDist;
+      playerTrail.push({x:px, y:py, life:1});
+    }
+    for (var i=playerTrail.length-1;i>=0;i--){
+      var tr = playerTrail[i];
+      tr.life -= 0.06;
+      if (tr.life <= 0){ playerTrail.splice(i,1); continue; }
+      ctx.globalAlpha = tr.life * 0.35;
+      ctx.fillStyle = 'rgba(120,190,255,1)';
+      ctx.beginPath();
+      ctx.arc(tr.x, tr.y, 5 * tr.life, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    _origDrawPlayer();
+  };
+
+  // =========================================================
+  //  HUD sync
+  // =========================================================
+  function syncHUD(rawDt){
+    if (state === STATE_PLAY){
+      var sc = document.getElementById('scoreText');
+      if (sc.textContent !== String(Math.floor(score))){
+        sc.textContent = Math.floor(score);
+        sc.classList.remove('bump'); void sc.offsetWidth; sc.classList.add('bump');
+      }
+      document.getElementById('bestText').textContent = 'BEST ' + Math.floor(Math.max(best, score));
+      refreshPowerupHUD();
+    }
+    if (comboShowTimer > 0){
+      comboShowTimer -= rawDt;
+      if (comboShowTimer <= 0){
+        document.getElementById('comboText').classList.remove('show');
+      }
+    }
+  }
+
+  // =========================================================
+  //  Main loop
+  // =========================================================
+  function frame(now){
+    var rawDt = Math.min(0.033, (now - lastTime) / 1000);
+    lastTime = now;
+    if (hitStop > 0){
+      hitStop -= rawDt;
+      // freeze simulation but keep rendering for impact
+      draw(now);
+      requestAnimationFrame(frame);
+      return;
+    }
+    update(rawDt);
+    syncHUD(rawDt);
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+
+  // =========================================================
+  //  Boot sequence
+  // =========================================================
+  initSDK().then(function(){
+    // load best score (Data module falls back to localStorage automatically when guest/offline)
+    var stored = null;
+    safe(function(){ stored = CG.data.getItem('nebulaDodgeBest'); });
+    if (stored) best = parseFloat(stored) || 0;
+
+    // respect SDK-forced mute, and listen for live changes (parental controls, etc.)
+    safe(function(){
+      if (CG.game.settings) userMuted = userMuted; // no-op, isMuted() reads CG.game.settings.muteAudio live
+      CG.game.addSettingsChangeListener(function(){ updateMuteIcon(); });
+    });
+    updateMuteIcon();
+
+    // ---- User module: account availability + live auth listener ----
+    safe(function(){
+      if (CG.user.isUserAccountAvailable){
+        CG.user.addAuthListener(function(user){
+          if (user) {
+            console.log('[CrazyGames] signed in as', user.username || user.nickname);
+            document.getElementById('bestText').textContent = 'BEST ' + Math.floor(best);
+          }
+        });
+      }
+    });
+    safe(function(){
+      CG.user.getUser().then(function(user){
+        if (user){
+          currentUser = user;
+          console.log('[CrazyGames] user:', user.username || user.nickname);
+        }
+      }).catch(function(){});
+    });
+
+    // ---- Environment module ----
+    safe(function(){
+      if (CG.sdk && CG.sdk.environment && CG.sdk.environment.get){
+        currentEnvironment = CG.sdk.environment.get();
+        console.log('[CrazyGames] environment:', currentEnvironment);
+      }
+    });
+
+    // ---- Instant multiplayer flag ----
+    safe(function(){
+      if (CG.game.isInstantMultiplayer){
+        console.log('[CrazyGames] instant multiplayer requested');
+      }
+    });
+
+    // ---- Banner module: request a banner container (no-op off-platform) ----
+    safe(function(){
+      if (CG.banner && CG.banner.requestBanner && bannerContainer){
+        CG.banner.requestBanner({ id: 'cg-banner', width: 320, height: 50 });
+      }
+    });
+
+    // ---- Invite link (multiplayer/referral) ----
+    safe(function(){
+      if (CG.game.inviteLink){
+        var link = CG.game.inviteLink('starfall-lanes-room');
+        if (link) console.log('[CrazyGames] invite link:', link);
+      }
+      if (CG.game.inviteParam){
+        var inv = CG.game.inviteParam('room');
+        if (inv) console.log('[CrazyGames] invited to room:', inv);
+      }
+    });
+
+    // ---- User tokens (auth / xsolla) — informational only ----
+    safe(function(){ CG.user.getToken().then(function(t){ if (t) console.log('[CrazyGames] user token present'); }).catch(function(){}); });
+    safe(function(){ CG.user.getXsollaUser().then(function(){}).catch(function(){}); });
+    safe(function(){ CG.user.isChild().then(function(c){ if (c) console.log('[CrazyGames] child account'); }).catch(function(){}); });
+
+    // ---- Adblock detection (informational only — no ad is ever requested) ----
+    safe(function(){
+      CG.ad.hasAdblock().then(function(blocked){
+        console.log('[CrazyGames] adblock detected:', !!blocked);
+      }).catch(function(){});
+    });
+
+    safe(function(){ CG.game.loadingStop(); }); // gameplay hasn't started yet (still on start screen) - fine to call once assets/menu are ready
+
+    document.getElementById('bestText').textContent = 'BEST ' + Math.floor(best);
+  });
+
+  // Start the render loop immediately so the menu/game are responsive
+  // without waiting for (possibly slow / offline) SDK initialization.
+  requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
