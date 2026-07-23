@@ -160,6 +160,22 @@
   .lane-touch{display:none}
   @media (hover:none){.lane-touch{display:grid}}
 
+  /* Hold note tail */
+  .hold-tail{position:absolute;border-radius:6px 6px 0 0;opacity:.6}
+
+  /* Practice badge */
+  .practice-badge{
+    position:absolute;top:10px;right:10px;
+    background:var(--green);border:3px solid var(--navy);
+    border-radius:10px;padding:4px 10px;
+    font-size:11px;font-weight:800;text-transform:uppercase;
+    box-shadow:2px 2px 0 var(--navy);z-index:10;
+  }
+
+  /* Pause overlay buttons */
+  .pause-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:20}
+  .pause-overlay .chunky-btn{min-width:180px}
+
   /* Sticky stage bar */
   .stage-wrap{position:relative;z-index:5}
 
@@ -306,6 +322,12 @@
           <div class="w-12"></div>
         </div>
         <div id="level-grid" class="grid grid-cols-2 md:grid-cols-3 gap-4"></div>
+        <div class="flex items-center justify-center gap-3 mt-5">
+          <button id="practice-toggle" class="chunky-btn" style="padding:10px 18px;font-size:14px">
+            <span>Practice Mode</span>
+            <span id="practice-indicator" class="ml-2 px-2 py-0.5 rounded-full text-xs font-bold" style="background:var(--navy);color:#fff">OFF</span>
+          </button>
+        </div>
       </div>
 
       <!-- Game Screen -->
@@ -344,7 +366,7 @@
               <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
             <div class="text-sm font-semibold opacity-70">
-              Press <span class="font-mono font-bold">D F J K</span> · <span class="font-mono font-bold">Space</span> to pause
+              Press <span class="font-mono font-bold">D F J K</span> · <span class="font-mono font-bold">Space/P</span> to pause
             </div>
             <button class="chunky-btn icon" onclick="togglePause()" aria-label="Pause" title="Pause (Space)">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" stroke-linecap="round"><path d="M10 4v16M18 4v16"/></svg>
@@ -401,7 +423,7 @@
     </div>
   </div>
 
-  <p class="text-center text-xs opacity-50 mt-4">Tip: use <span class="font-mono font-bold">D F J K</span> on keyboard, or tap the lanes on touch screens.</p>
+  <p class="text-center text-xs opacity-50 mt-4">Tip: use <span class="font-mono font-bold">D F J K</span> on keyboard, tap lanes on touch · <span class="font-mono font-bold">Space/P</span> pause · <span class="font-mono font-bold">Esc</span> quit</p>
 </section>
 
 <!-- Features / How to Play -->
@@ -473,7 +495,8 @@ const state = {
   unlockedLevels:[1],
   highScores:{},
   audioEnabled:true,
-  motionReduced:false
+  motionReduced:false,
+  practiceMode:false
 };
 
 const levels = [
@@ -488,8 +511,47 @@ const levels = [
   {id:9, name:'Master Craft', bpm:155, duration:50, difficulty:'Hard',   density:.88, color:'coral'}
 ];
 
+/* ---------- localStorage ---------- */
+function saveState(){
+  try{
+    localStorage.setItem('beatcraft_save', JSON.stringify({
+      unlockedLevels:state.unlockedLevels,
+      highScores:state.highScores,
+      audioEnabled:state.audioEnabled,
+      motionReduced:state.motionReduced,
+      practiceMode:state.practiceMode
+    }));
+  }catch(e){}
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem('beatcraft_save');
+    if(raw){
+      const d = JSON.parse(raw);
+      if(d.unlockedLevels) state.unlockedLevels = d.unlockedLevels;
+      if(d.highScores) state.highScores = d.highScores;
+      if(d.audioEnabled!==undefined) state.audioEnabled = d.audioEnabled;
+      if(d.motionReduced!==undefined) state.motionReduced = d.motionReduced;
+      if(d.practiceMode!==undefined) state.practiceMode = d.practiceMode;
+    }
+  }catch(e){}
+}
+
+function syncPracticeUI(){
+  const ind = document.getElementById('practice-indicator');
+  const btn = document.getElementById('practice-toggle');
+  if(ind){
+    ind.textContent = state.practiceMode ? 'ON' : 'OFF';
+    ind.style.background = state.practiceMode ? 'var(--green)' : 'var(--navy)';
+    ind.style.color = state.practiceMode ? 'var(--navy)' : '#fff';
+  }
+  if(btn) btn.classList.toggle('toggled-off', !state.practiceMode);
+}
+
 /* ---------- Audio ---------- */
 let audioCtx = null;
+let bgNodes = null;
+
 function ensureAudio(){
   if(!audioCtx){
     try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
@@ -530,12 +592,82 @@ function playNoiseBurst(dur=.05, gain=.08, hp=4000){
   src.start();
 }
 
+/* Metronome click for count-in */
+function playClick(){
+  if(!state.audioEnabled) return;
+  const ctx = ensureAudio(); if(!ctx) return;
+  const t0 = ctx.currentTime + .01;
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type='sine'; osc.frequency.value=2200;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(.12, t0+.002);
+  g.gain.exponentialRampToValueAtTime(.0001, t0+.06);
+  osc.connect(g); g.connect(ctx.destination);
+  osc.start(t0); osc.stop(t0+.08);
+}
+function playAccentClick(){
+  if(!state.audioEnabled) return;
+  const ctx = ensureAudio(); if(!ctx) return;
+  const t0 = ctx.currentTime + .01;
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type='triangle'; osc.frequency.value=3600;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(.18, t0+.002);
+  g.gain.exponentialRampToValueAtTime(.0001, t0+.1);
+  osc.connect(g); g.connect(ctx.destination);
+  osc.start(t0); osc.stop(t0+.12);
+}
+
+/* Background music — procedural bass pad */
+function startBGM(bpm){
+  if(!state.audioEnabled) return;
+  const ctx = ensureAudio(); if(!ctx) return;
+  if(bgNodes) stopBGM();
+  beatRoots = [110,110,110,110]; // simple pedal tone
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+  osc.type='sawtooth';
+  osc.frequency.value = 55;
+  filter.type='lowpass'; filter.frequency.value=220; filter.Q.value=2;
+  gain.gain.setValueAtTime(.045, ctx.currentTime);
+  osc.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+  osc.start();
+  bgNodes = {osc, gain, filter, root:55, started:ctx.currentTime};
+}
+function stopBGM(){
+  if(!bgNodes) return;
+  try{
+    const g = bgNodes.gain;
+    g.gain.linearRampToValueAtTime(.0001, audioCtx.currentTime+.15);
+    setTimeout(()=>{ try{bgNodes.osc.stop();}catch(e){} }, 200);
+  }catch(e){}
+  bgNodes = null;
+}
+function updateBGM(bpm, beatIdx){
+  if(!bgNodes || !state.audioEnabled) return;
+  if(beatIdx < 0) return;
+  const ctx = audioCtx;
+  const now = ctx.currentTime;
+  const root = 55 + [0,1,-1,0][beatIdx % 4] * 2;
+  if(Math.abs(bgNodes.osc.frequency.value - root) > .5){
+    bgNodes.osc.frequency.linearRampToValueAtTime(root, now + .08);
+    bgNodes.root = root;
+    const f = 180 + (beatIdx % 4 === 0 ? 280 : 180);
+    bgNodes.filter.frequency.linearRampToValueAtTime(f, now + .06);
+    const g = beatIdx % 4 === 0 ? .065 : .045;
+    bgNodes.gain.gain.linearRampToValueAtTime(g, now + .03);
+  }
+}
+let beatRoots = [];
+
 /* ---------- Canvas / Game ---------- */
 const canvas = document.getElementById('game-canvas');
 const ctx2 = canvas.getContext('2d');
 const W = 480, H = 680;
 
-// roundRect polyfill
 if(!CanvasRenderingContext2D.prototype.roundRect){
   CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r){
     if(typeof r==='number') r=[r,r,r,r];
@@ -552,11 +684,14 @@ if(!CanvasRenderingContext2D.prototype.roundRect){
 
 const LANE_COLORS = ['#FF6B6B','#FFD23F','#4ADE80','#38BDF8'];
 const LANE_KEYS = ['d','f','j','k'];
-const FALL_TIME = 1700;
+const BASE_FALL_TIME = 1700;
 const PERFECT_WIN = 75;
 const GOOD_WIN = 150;
+const HOLD_PERFECT_WIN = 100;
+const HOLD_GOOD_WIN = 200;
 
 let game = null;
+let holdKeyState = [false,false,false,false];
 
 class Game {
   constructor(level){
@@ -564,11 +699,13 @@ class Game {
     this.notes = [];
     this.particles = [];
     this.popups = [];
+    this.noteTrails = [];
     this.laneFlash = [0,0,0,0];
+    this.laneGlow = [0,0,0,0];
     this.score = 0;
     this.combo = 0;
     this.maxCombo = 0;
-    this.lives = 3;
+    this.lives = state.practiceMode ? Infinity : 3;
     this.hits = {perfect:0, good:0, miss:0};
     this.elapsed = 0;
     this.startTime = 0;
@@ -578,11 +715,16 @@ class Game {
     this.running = false;
     this.lastBeatIdx = -1;
     this.beatPulse = 0;
+    this.bgPulse = 0;
     this.endTime = (level.duration + 2) * 1000;
-    this.countdownMs = 2200;
+    this.countdownMs = 2800;
     this.countingDown = true;
+    this.countInBeat = -1;
+    this.lastCountClick = -1;
     this.shake = 0;
     this.gameOver = false;
+    this.fallTime = state.practiceMode ? BASE_FALL_TIME * 1.5 : BASE_FALL_TIME;
+    this.heldNotes = [];
     this.generate();
   }
 
@@ -596,12 +738,14 @@ class Game {
       if(Math.random() < this.level.density){
         let lane;
         do{ lane = Math.floor(Math.random()*4); } while(lane===lastLane && Math.random()<.55);
-        this.notes.push({time, lane, hit:false, missed:false});
+        const isHold = !state.practiceMode && Math.random() < .18;
+        const holdDur = isHold ? 250 + Math.random()*350 : 0;
+        this.notes.push({time, lane, hit:false, missed:false, hold:isHold, holdDur, holding:false, holdStart:0, holdReleased:false});
         lastLane = lane;
         if(this.level.difficulty!=='Easy' && Math.random()<.12){
           let l2;
           do{ l2 = Math.floor(Math.random()*4); } while(l2===lane);
-          this.notes.push({time, lane:l2, hit:false, missed:false});
+          this.notes.push({time, lane:l2, hit:false, missed:false, hold:false, holdDur:0, holding:false, holdStart:0, holdReleased:false});
         }
       }
     }
@@ -618,11 +762,17 @@ class Game {
     if(this.paused || !this.running) return;
     this.paused = true;
     this.pauseStart = performance.now();
+    if(bgNodes){
+      try{ bgNodes.gain.gain.linearRampToValueAtTime(.0001, audioCtx.currentTime+.05); }catch(e){}
+    }
   }
   resume(){
     if(!this.paused) return;
     this.totalPauseMs += performance.now() - this.pauseStart;
     this.paused = false;
+    if(bgNodes && state.audioEnabled){
+      try{ bgNodes.gain.gain.linearRampToValueAtTime(.06, audioCtx.currentTime+.05); }catch(e){}
+    }
   }
 
   loop(now){
@@ -631,31 +781,59 @@ class Game {
     this.lastFrame = now;
 
     if(!this.paused){
-      // Countdown first
       if(this.countingDown){
         this.countdownMs -= dt;
+        const beatMs = 60000/this.level.bpm;
+        const countBeat = Math.floor((2800 - this.countdownMs) / beatMs);
+        if(countBeat !== this.lastCountClick && countBeat >= 0 && countBeat < 4){
+          this.lastCountClick = countBeat;
+          if(countBeat === 0) playAccentClick(); else playClick();
+        }
         if(this.countdownMs <= 0){
           this.countingDown = false;
           this.startTime = now;
+          this.lastCountClick = -1;
+          startBGM(this.level.bpm);
         }
       } else {
         this.elapsed = now - this.startTime - this.totalPauseMs;
-        // Beat triggers
         const beatMs = 60000/this.level.bpm;
         const beatIdx = Math.floor(this.elapsed/beatMs);
         if(beatIdx !== this.lastBeatIdx && beatIdx >= 0){
           this.lastBeatIdx = beatIdx;
           this.beatPulse = 1;
+          this.bgPulse = 1;
           this.playKick(beatIdx % 4 === 0);
           if(beatIdx % 2 === 1) this.playHat();
+          if(beatIdx % 4 === 2) this.playSnare();
+          updateBGM(this.level.bpm, beatIdx);
         }
         this.beatPulse *= .9;
+        this.bgPulse *= .97;
 
-        // Check misses
+        // Check missed notes (includes hold notes that weren't caught)
         for(const n of this.notes){
-          if(!n.hit && !n.missed && this.elapsed - n.time > GOOD_WIN){
+          if(!n.hit && !n.missed && !n.holding && this.elapsed - n.time > GOOD_WIN + (n.hold ? 300 : 0)){
             n.missed = true;
             this.registerMiss(n.lane);
+          }
+        }
+
+        // Check hold note releases
+        for(const n of this.heldNotes.slice()){
+          if(!holdKeyState[n.lane]){
+            n.holding = false;
+            n.holdReleased = true;
+            const heldMs = this.elapsed - n.holdStart;
+            if(heldMs >= n.holdDur * .7){
+              const perfect = Math.abs(heldMs - n.holdDur) < HOLD_PERFECT_WIN;
+              n.hit = true;
+              this.registerHit(n.lane, perfect, true);
+            } else {
+              n.missed = true;
+              this.registerMiss(n.lane);
+            }
+            this.heldNotes = this.heldNotes.filter(x=>x!==n);
           }
         }
 
@@ -669,7 +847,7 @@ class Game {
         for(let i=this.particles.length-1;i>=0;i--){
           const p = this.particles[i];
           p.x+=p.vx; p.y+=p.vy; p.vy+=.35;
-          p.vx*=.98;
+          p.vx*=.98; p.vy*=.99;
           p.life--;
           p.rot+=p.vr;
           if(p.life<=0) this.particles.splice(i,1);
@@ -680,7 +858,15 @@ class Game {
           p.life--;
           if(p.life<=0) this.popups.splice(i,1);
         }
-        for(let i=0;i<4;i++) this.laneFlash[i] *= .85;
+        for(let i=this.noteTrails.length-1;i>=0;i--){
+          const t = this.noteTrails[i];
+          t.life--;
+          if(t.life<=0) this.noteTrails.splice(i,1);
+        }
+        for(let i=0;i<4;i++){
+          this.laneFlash[i] *= .85;
+          this.laneGlow[i] *= .93;
+        }
         this.shake *= .82;
       }
     }
@@ -695,12 +881,23 @@ class Game {
     playTone({freq:accent?140:100, type:'sine', dur:.16, gain:accent?.42:.28, slideTo:42, attack:.002});
   }
   playHat(){
-    playNoiseBurst(.04, .05, 6000);
+    playNoiseBurst(.04, .045, 6000);
   }
-  playHitSound(lane, perfect){
+  playSnare(){
+    playNoiseBurst(.06, .07, 800);
+    playTone({freq:200, type:'triangle', dur:.08, gain:.12, attack:.001});
+  }
+  playHitSound(lane, perfect, isHold){
     const freqs = [330, 440, 550, 660];
+    if(state.practiceMode){
+      playTone({freq:freqs[lane], type:'triangle', dur:.1, gain:.1, attack:.001});
+      return;
+    }
     playTone({freq:freqs[lane], type:'triangle', dur:.13, gain:.22, slideTo:freqs[lane]*1.4, attack:.001});
     if(perfect) playTone({freq:freqs[lane]*2, type:'sine', dur:.18, gain:.12, attack:.001});
+    if(isHold){
+      playTone({freq:freqs[lane]*0.5, type:'sawtooth', dur:.2, gain:.1, attack:.01});
+    }
   }
   playMissSound(){
     playTone({freq:170, type:'sawtooth', dur:.18, gain:.14, slideTo:80, attack:.002});
@@ -709,56 +906,77 @@ class Game {
   handleKey(lane){
     if(!this.running || this.paused) return;
     if(this.countingDown) return;
+    holdKeyState[lane] = true;
     this.laneFlash[lane] = 1;
+    this.laneGlow[lane] = 1;
     let nearest=null, dist=Infinity;
     for(const n of this.notes){
-      if(n.lane!==lane || n.hit || n.missed) continue;
+      if(n.lane!==lane || n.hit || n.missed || n.holding) continue;
       const d = Math.abs(n.time - this.elapsed);
       if(d < dist){ dist=d; nearest=n; }
     }
     if(nearest && dist < GOOD_WIN){
-      nearest.hit = true;
-      const perfect = dist < PERFECT_WIN;
-      this.registerHit(lane, perfect);
+      if(nearest.hold){
+        nearest.holding = true;
+        nearest.holdStart = this.elapsed;
+        this.heldNotes.push(nearest);
+        this.popups.push({
+          x: lane*(W/4) + (W/8), y: H - 130,
+          text: 'HOLD', color: LANE_COLORS[lane], life: 40
+        });
+        this.playHitSound(lane, dist < PERFECT_WIN, true);
+        this.spawnParticles(lane, 6, dist < PERFECT_WIN);
+      } else {
+        nearest.hit = true;
+        const perfect = dist < PERFECT_WIN;
+        this.registerHit(lane, perfect, false);
+      }
     }
   }
 
-  registerHit(lane, perfect){
+  handleKeyUp(lane){
+    holdKeyState[lane] = false;
+  }
+
+  registerHit(lane, perfect, isHold){
     const base = perfect ? 100 : 50;
     const bonus = Math.floor(this.combo/10)*15;
-    this.score += base + bonus;
+    const holdBonus = isHold ? (perfect ? 60 : 30) : 0;
+    this.score += base + bonus + holdBonus;
     this.combo++;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     if(perfect) this.hits.perfect++; else this.hits.good++;
-    this.spawnParticles(lane, perfect?16:10, perfect);
-    this.popups.push({
-      x: lane*(W/4) + (W/8),
-      y: H - 130,
-      text: perfect ? 'PERFECT' : 'GOOD',
-      color: perfect ? '#4ADE80' : '#FFD23F',
-      life: 55
-    });
-    this.playHitSound(lane, perfect);
+    const count = state.practiceMode ? 6 : (perfect?16:10);
+    this.spawnParticles(lane, count, perfect);
+    if(!isHold){
+      this.popups.push({
+        x: lane*(W/4) + (W/8), y: H - 130,
+        text: perfect ? 'PERFECT' : 'GOOD',
+        color: perfect ? '#4ADE80' : '#FFD23F', life: 55
+      });
+    } else {
+      this.popups.push({
+        x: lane*(W/4) + (W/8), y: H - 130,
+        text: (perfect?'HOLD+':'hold'), color: perfect ? '#38BDF8' : '#94A3B8', life: 50
+      });
+    }
+    this.playHitSound(lane, perfect, isHold);
     if(navigator.vibrate) navigator.vibrate(perfect?28:14);
   }
 
   registerMiss(lane){
+    if(state.practiceMode) return;
     this.combo = 0;
     this.lives--;
     this.hits.miss++;
     this.shake = 8;
     this.popups.push({
-      x: lane*(W/4) + (W/8),
-      y: H - 130,
-      text: 'MISS',
-      color: '#FF6B6B',
-      life: 50
+      x: lane*(W/4) + (W/8), y: H - 130,
+      text: 'MISS', color: '#FF6B6B', life: 50
     });
     this.playMissSound();
     if(navigator.vibrate) navigator.vibrate([20,30,20]);
-    if(this.lives<=0){
-      this.finish(true);
-    }
+    if(this.lives<=0) this.finish(true);
   }
 
   spawnParticles(lane, count, perfect){
@@ -770,14 +988,10 @@ class Game {
       const ang = (Math.PI*2*i/count) + Math.random()*.4;
       const sp = 3 + Math.random()*5;
       this.particles.push({
-        x:cx, y:cy,
-        vx:Math.cos(ang)*sp,
-        vy:Math.sin(ang)*sp - 2,
-        size: 5 + Math.random()*7,
+        x:cx, y:cy, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp - 2,
+        size: 5 + Math.random()*7, life: 28 + Math.random()*22,
         color: Math.random()<.35 ? '#FFFFFF' : (perfect && Math.random()<.3 ? '#FFD23F' : baseColor),
-        life: 28 + Math.random()*22,
-        rot: Math.random()*Math.PI*2,
-        vr: (Math.random()-.5)*.4
+        rot: Math.random()*Math.PI*2, vr: (Math.random()-.5)*.4
       });
     }
   }
@@ -786,6 +1000,7 @@ class Game {
     if(!this.running) return;
     this.running = false;
     this.gameOver = gameOver;
+    stopBGM();
     showResults(this, gameOver);
   }
 
@@ -794,7 +1009,7 @@ class Game {
     const combo = this.combo;
     const total = this.hits.perfect + this.hits.good + this.hits.miss;
     const acc = total===0 ? 100 : Math.round((this.hits.perfect + this.hits.good*.5)/total*100);
-    const hearts = '♥'.repeat(Math.max(0,this.lives)) + '♡'.repeat(Math.max(0,3-this.lives));
+    const hearts = state.practiceMode ? '∞' : '♥'.repeat(Math.max(0,this.lives)) + '♡'.repeat(Math.max(0,3-this.lives));
     const set = (id, v, idM, vM) => {
       const el = document.getElementById(id); if(el) el.textContent = v;
       const elm = document.getElementById(idM); if(elm) elm.textContent = vM;
@@ -808,20 +1023,33 @@ class Game {
   render(){
     const c = ctx2;
     c.save();
-    // Shake
     if(this.shake > .3 && !state.motionReduced){
       const sx = (Math.random()-.5)*this.shake;
       const sy = (Math.random()-.5)*this.shake;
       c.translate(sx, sy);
     }
 
-    // Background
-    const p = this.beatPulse;
+    // Background — animated w/ BPM sync
+    const bp = this.bgPulse;
     const grad = c.createLinearGradient(0,0,0,H);
-    grad.addColorStop(0, `rgb(${22+p*30},${27+p*20},${58+p*40})`);
-    grad.addColorStop(1, `rgb(${14+p*18},${18+p*14},${38+p*25})`);
+    const r1 = Math.min(60, 22 + bp*38);
+    const g1 = Math.min(60, 27 + bp*33);
+    const b1 = Math.min(110, 58 + bp*52);
+    grad.addColorStop(0, `rgb(${r1},${g1},${b1})`);
+    grad.addColorStop(1, `rgb(${14+Math.floor(bp*22)},${18+Math.floor(bp*18)},${38+Math.floor(bp*30)})`);
     c.fillStyle = grad;
     c.fillRect(0,0,W,H);
+
+    // Subtle floating circles
+    if(!state.motionReduced && this.bgPulse > .3){
+      c.globalAlpha = this.bgPulse * .04;
+      for(let i=0;i<4;i++){
+        const cx = (W/4)*i + W/8;
+        const r = 40 + this.bgPulse * 30;
+        c.beginPath(); c.arc(cx, H/2, r, 0, Math.PI*2); c.fillStyle = LANE_COLORS[i]; c.fill();
+      }
+      c.globalAlpha = 1;
+    }
 
     // Lanes
     const laneW = W/4;
@@ -830,7 +1058,18 @@ class Game {
       const x = i*laneW;
       c.fillStyle = i%2===0 ? 'rgba(255,255,255,.025)' : 'rgba(255,255,255,.05)';
       c.fillRect(x, 0, laneW, H);
-      // Lane flash glow
+      // Lane glow (sustained)
+      if(this.laneGlow[i] > .05){
+        c.save();
+        const lg = c.createRadialGradient(x+laneW/2, hitY, 5, x+laneW/2, hitY, laneW * this.laneGlow[i] * 1.2);
+        lg.addColorStop(0, LANE_COLORS[i] + '80');
+        lg.addColorStop(1, 'transparent');
+        c.globalAlpha = this.laneGlow[i] * .5;
+        c.fillStyle = lg;
+        c.fillRect(x, hitY - laneW, laneW, laneW * 2);
+        c.restore();
+      }
+      // Lane flash
       if(this.laneFlash[i] > .05){
         const lg = c.createLinearGradient(0, hitY-180, 0, hitY+50);
         lg.addColorStop(0, 'rgba(255,255,255,0)');
@@ -864,34 +1103,111 @@ class Game {
     c.fillStyle = 'rgba(255,255,255,.9)';
     c.fillRect(0, hitY-2, W, 4);
 
+    // Note trails
+    for(const t of this.noteTrails){
+      c.save();
+      c.globalAlpha = t.life/12;
+      c.fillStyle = t.color;
+      c.roundRect(t.x, t.y, t.w, t.h, 6); c.fill();
+      c.restore();
+    }
+
     // Notes
     for(const n of this.notes){
       if(n.hit) continue;
       const dt = n.time - this.elapsed;
-      if(dt > FALL_TIME) continue;
+      if(dt > this.fallTime) continue;
       if(n.missed && dt < -GOOD_WIN-200) continue;
-      const progress = 1 - (dt / FALL_TIME);
+      const progress = 1 - (dt / this.fallTime);
       const y = progress * hitY;
-      if(y < -40) continue;
+      if(y < -80) continue;
       const x = n.lane*laneW + 14;
       const nw = laneW - 28;
-      const nh = 34;
+      const nh = n.hold ? 40 : 34;
+
+      // Hold tail
+      if(n.hold && !n.missed){
+        const tailLen = Math.min(120, (n.holdDur / this.fallTime) * hitY);
+        const tailY = y - tailLen;
+        if(tailY < hitY - 40){
+          c.save();
+          c.globalAlpha = .35;
+          const tg = c.createLinearGradient(0, y, 0, tailY);
+          tg.addColorStop(0, LANE_COLORS[n.lane] + '80');
+          tg.addColorStop(1, LANE_COLORS[n.lane] + '10');
+          c.fillStyle = tg;
+          c.roundRect(x + 8, Math.max(0, tailY), nw - 16, Math.min(y - tailY, hitY-40), [6,6,0,0]); c.fill();
+          c.strokeStyle = LANE_COLORS[n.lane];
+          c.globalAlpha = .2;
+          c.lineWidth = 2;
+          c.roundRect(x + 8, Math.max(0, tailY), nw - 16, Math.min(y - tailY, hitY-40), [6,6,0,0]); c.stroke();
+          c.restore();
+        }
+      }
+
+      // Trail effect
+      if(!n.missed && !state.motionReduced && progress > .1 && progress < .9){
+        this.noteTrails.push({x, y: y-4, w: nw, h: 6, color: LANE_COLORS[n.lane] + '40', life: 4});
+      }
+
       // Shadow
       c.fillStyle = 'rgba(0,0,0,.35)';
       c.roundRect(x+3, y+4, nw, nh, 12); c.fill();
       // Body
-      c.fillStyle = n.missed ? '#3a3f5c' : LANE_COLORS[n.lane];
+      if(n.missed){
+        c.fillStyle = '#3a3f5c';
+      } else if(n.holding){
+        const flash = Math.sin(performance.now()/80) * .25 + .75;
+        c.fillStyle = `rgba(255,255,255,${flash*.4})`;
+      } else {
+        c.fillStyle = LANE_COLORS[n.lane];
+      }
       c.roundRect(x, y, nw, nh, 12); c.fill();
-      // Highlight stripe
+
+      // Hold note indicator
+      if(n.hold && !n.missed && !n.holding){
+        c.fillStyle = 'rgba(255,255,255,.7)';
+        c.font = 'bold 14px Fredoka, sans-serif';
+        c.textAlign = 'center';
+        c.fillText('▼', x+nw/2, y+nh-6);
+      }
+
+      // Highlight
       c.fillStyle = 'rgba(255,255,255,.45)';
       c.roundRect(x+5, y+5, nw-10, 7, 4); c.fill();
       // Border
-      c.strokeStyle = '#0E1330';
-      c.lineWidth = 3;
+      c.strokeStyle = n.holding ? '#FFF' : '#0E1330';
+      c.lineWidth = n.holding ? 4 : 3;
       c.roundRect(x, y, nw, nh, 12); c.stroke();
-      // Inner shine dot
-      c.fillStyle = 'rgba(255,255,255,.55)';
-      c.beginPath(); c.arc(x+nw-12, y+nh/2, 3, 0, Math.PI*2); c.fill();
+      // Shine
+      if(!n.holding){
+        c.fillStyle = 'rgba(255,255,255,.55)';
+        c.beginPath(); c.arc(x+nw-12, y+nh/2, 3, 0, Math.PI*2); c.fill();
+      }
+    }
+
+    // Held note progress rings
+    for(const n of this.heldNotes){
+      if(!n.holding) continue;
+      const cx = n.lane*laneW + laneW/2;
+      const progress = Math.min(1, (this.elapsed - n.holdStart) / n.holdDur);
+      c.save();
+      c.translate(cx, hitY);
+      c.strokeStyle = '#4ADE80';
+      c.lineWidth = 4;
+      c.globalAlpha = .7;
+      c.beginPath(); c.arc(0, 0, 24, -Math.PI/2, -Math.PI/2 + Math.PI*2*progress); c.stroke();
+      c.fillStyle = '#4ADE80';
+      c.globalAlpha = .3;
+      c.beginPath(); c.arc(0, 0, 20, 0, Math.PI*2); c.fill();
+      c.font = 'bold 12px Fredoka, sans-serif';
+      c.fillStyle = '#fff';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.globalAlpha = .8;
+      c.fillText(Math.ceil(progress*100)+'%', 0, 0);
+      c.textBaseline = 'alphabetic';
+      c.restore();
     }
 
     // Particles
@@ -924,7 +1240,7 @@ class Game {
     }
     c.globalAlpha = 1;
 
-    // Combo (center-top)
+    // Combo
     if(this.combo >= 4){
       c.save();
       const sc = 1 + Math.min(.3, this.combo*.01);
@@ -935,8 +1251,7 @@ class Game {
       c.lineWidth = 6;
       c.strokeStyle = '#0E1330';
       const grad2 = c.createLinearGradient(0,-20,0,20);
-      grad2.addColorStop(0,'#FFD23F');
-      grad2.addColorStop(1,'#FF6B6B');
+      grad2.addColorStop(0,'#FFD23F'); grad2.addColorStop(1,'#FF6B6B');
       c.strokeText(this.combo + ' COMBO', 0, 0);
       c.fillStyle = grad2;
       c.fillText(this.combo + ' COMBO', 0, 0);
@@ -947,26 +1262,41 @@ class Game {
     c.font = 'bold 18px Fredoka, sans-serif';
     c.textAlign = 'center';
     for(let i=0;i<4;i++){
-      const x = i*laneW + laneW/2;
       c.fillStyle = 'rgba(255,255,255,.65)';
-      c.fillText(['D','F','J','K'][i], x, H-18);
+      c.fillText(['D','F','J','K'][i], i*laneW + laneW/2, H-18);
+    }
+
+    // Practice badge
+    if(state.practiceMode){
+      c.save();
+      c.fillStyle = '#4ADE80';
+      c.font = 'bold 13px Fredoka, sans-serif';
+      c.textAlign = 'right';
+      c.fillStyle = 'rgba(255,255,255,.6)';
+      c.fillRect(W-84, 8, 76, 22);
+      c.roundRect(W-84, 8, 76, 22, 6); c.fill();
+      c.fillStyle = '#161B3A';
+      c.font = 'bold 11px Fredoka, sans-serif';
+      c.fillText('PRACTICE', W-14, 23);
+      c.restore();
     }
 
     // Progress bar
     const prog = Math.min(1, Math.max(0, this.elapsed/this.endTime));
     c.fillStyle = 'rgba(255,255,255,.15)';
     c.fillRect(16, 16, W-32, 8);
-    c.fillStyle = '#4ADE80';
+    c.fillStyle = state.practiceMode ? '#4ADE80' : '#4ADE80';
     c.roundRect(16, 16, (W-32)*prog, 8, 4); c.fill();
 
-    // Countdown
+    // Countdown w/ metronome feel
     if(this.countingDown){
       c.fillStyle = 'rgba(14,19,48,.6)';
       c.fillRect(0,0,W,H);
       const num = Math.ceil(this.countdownMs/700);
       const label = num > 0 ? String(num) : 'GO!';
+      const isBeat = this.lastCountClick >= 0;
       c.save();
-      c.translate(W/2, H/2);
+      c.translate(W/2, H/2 - 20);
       const phase = (this.countdownMs % 700) / 700;
       const sc = 1 + (1-phase)*.5;
       c.scale(sc, sc);
@@ -977,7 +1307,7 @@ class Game {
       c.lineWidth = 8;
       c.strokeStyle = '#0E1330';
       c.strokeText(label, 0, 0);
-      c.fillStyle = label==='GO!' ? '#4ADE80' : '#FFD23F';
+      c.fillStyle = label==='GO!' ? '#4ADE80' : (isBeat && num <= 4 ? '#38BDF8' : '#FFD23F');
       c.fillText(label, 0, 0);
       c.restore();
       c.globalAlpha = 1;
@@ -985,20 +1315,44 @@ class Game {
       c.font = 'bold 18px Fredoka, sans-serif';
       c.fillStyle = '#fff';
       c.textAlign = 'center';
-      c.fillText('Get ready', W/2, H/2 + 90);
+      const countBar = Math.min(4, Math.floor((2800 - this.countdownMs) / (60000/this.level.bpm)));
+      if(countBar < 4 && countBar >= 0){
+        c.fillText('·'.repeat(countBar + 1) + '  tap in', W/2, H/2 + 95);
+      } else {
+        c.fillText('Get ready', W/2, H/2 + 95);
+      }
     }
 
-    // Paused overlay
+    // Paused overlay — full menu
     if(this.paused){
-      c.fillStyle = 'rgba(14,19,48,.75)';
+      c.fillStyle = 'rgba(14,19,48,.82)';
       c.fillRect(0,0,W,H);
       c.fillStyle = '#fff';
-      c.font = 'bold 56px Fredoka, sans-serif';
+      c.font = 'bold 48px Fredoka, sans-serif';
       c.textAlign = 'center';
-      c.fillText('PAUSED', W/2, H/2);
-      c.font = '600 18px Plus Jakarta Sans, sans-serif';
-      c.fillStyle = 'rgba(255,255,255,.75)';
-      c.fillText('Press Space or tap pause to resume', W/2, H/2 + 36);
+      c.fillText('PAUSED', W/2, H/2 - 70);
+      c.font = '600 16px Plus Jakarta Sans, sans-serif';
+      c.fillStyle = 'rgba(255,255,255,.7)';
+      c.fillText('Space / P to resume', W/2, H/2 - 25);
+      // Pause menu buttons
+      const bx = W/2 - 80, by = H/2 + 10, bw = 160, bh = 44;
+      // Resume button
+      c.fillStyle = '#4ADE80';
+      c.roundRect(bx, by, bw, bh, 14); c.fill();
+      c.strokeStyle = '#161B3A'; c.lineWidth = 3;
+      c.roundRect(bx, by, bw, bh, 14); c.stroke();
+      c.fillStyle = '#161B3A';
+      c.font = 'bold 18px Fredoka, sans-serif';
+      c.fillText('▶  RESUME', W/2, by + 28);
+      // Quit button
+      const qy = by + bh + 12;
+      c.fillStyle = '#FF6B6B';
+      c.roundRect(bx, qy, bw, bh, 14); c.fill();
+      c.strokeStyle = '#161B3A'; c.lineWidth = 3;
+      c.roundRect(bx, qy, bw, bh, 14); c.stroke();
+      c.fillStyle = '#fff';
+      c.font = 'bold 18px Fredoka, sans-serif';
+      c.fillText('✕  QUIT', W/2, qy + 28);
     }
 
     c.restore();
@@ -1029,16 +1383,10 @@ function showLevels(){
 function quickStart(){ startLevel(1); }
 
 const colorBgMap = {
-  coral:'var(--coral)',
-  yellow:'var(--yellow)',
-  green:'var(--green)',
-  sky:'var(--sky)'
+  coral:'var(--coral)', yellow:'var(--yellow)', green:'var(--green)', sky:'var(--sky)'
 };
 const colorTextMap = {
-  coral:'#fff',
-  yellow:'var(--navy)',
-  green:'var(--navy)',
-  sky:'var(--navy)'
+  coral:'#fff', yellow:'var(--navy)', green:'var(--navy)', sky:'var(--navy)'
 };
 
 function renderLevels(){
@@ -1063,19 +1411,13 @@ function renderLevels(){
             : `<svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M12 1a5 5 0 00-5 5v3H6a2 2 0 00-2 2v9a2 2 0 002 2h12a2 2 0 002-2v-9a2 2 0 00-2-2h-1V6a5 5 0 00-5-5zm0 2a3 3 0 013 3v3H9V6a3 3 0 013-3z"/></svg>`}
         </div>
         <div class="font-display font-bold text-xl mb-1">${level.name}</div>
-        <div class="text-xs font-semibold opacity-80 mb-3">${level.bpm} BPM · ${level.duration}s</div>
+        <div class="text-xs font-semibold opacity-80 mb-3">${level.bpm} BPM · ${level.duration}s${state.practiceMode?' · ∞ lives':''}</div>
         ${unlocked ? `
           <div class="flex gap-1 items-center">
-            ${[1,2,3].map(i=>`
-              <svg width="20" height="20" fill="${i<=stars?'currentColor':'none'}" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:${i<=stars?'1':'.4'}">
-                <path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z" stroke-linejoin="round"/>
-              </svg>
-            `).join('')}
+            ${[1,2,3].map(i=>`<svg width="20" height="20" fill="${i<=stars?'currentColor':'none'}" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:${i<=stars?'1':'.4'}"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z" stroke-linejoin="round"/></svg>`).join('')}
             ${hs>0?`<span class="text-xs font-bold ml-2 opacity-80">${hs}</span>`:''}
           </div>
-        ` : `
-          <div class="text-xs font-bold opacity-70">Clear previous level to unlock</div>
-        `}
+        ` : `<div class="text-xs font-bold opacity-70">Clear previous level to unlock</div>`}
       </div>
     `;
     if(unlocked){
@@ -1093,14 +1435,15 @@ function startLevel(id){
   if(!level) return;
   state.currentLevelId = id;
   showScreen('game');
-  if(game) game.running = false;
+  if(game) { game.running = false; stopBGM(); }
   game = new Game(level);
   game.start();
 }
 
 function quitGame(){
-  if(game) game.running = false;
+  if(game) { game.running = false; stopBGM(); }
   game = null;
+  holdKeyState = [false,false,false,false];
   showLevels();
   showToast('Level quit');
 }
@@ -1121,17 +1464,22 @@ function nextLevel(){
 function showResults(g, gameOver){
   const total = g.hits.perfect + g.hits.good + g.hits.miss;
   const acc = total===0 ? 0 : Math.round((g.hits.perfect + g.hits.good*.5)/total*100);
+  const practice = state.practiceMode;
 
   document.getElementById('result-perfect').textContent = g.hits.perfect;
   document.getElementById('result-good').textContent = g.hits.good;
   document.getElementById('result-miss').textContent = g.hits.miss;
-  document.getElementById('result-score').textContent = g.score;
+  document.getElementById('result-score').textContent = practice ? g.score + ' (practice)' : g.score;
   document.getElementById('result-combo').textContent = g.maxCombo + '×';
   document.getElementById('result-acc').textContent = acc + '%';
 
   const title = document.getElementById('results-title');
   const sub = document.getElementById('results-subtitle');
-  if(gameOver){
+  if(practice){
+    title.textContent = 'Practice Run';
+    title.style.color = 'var(--green)';
+    sub.textContent = 'No pressure — scores in practice don\'t count toward stars.';
+  } else if(gameOver){
     title.textContent = 'Out of lives';
     title.style.color = 'var(--coral)';
     sub.textContent = 'The run ended early — give it another shot.';
@@ -1151,7 +1499,7 @@ function showResults(g, gameOver){
 
   // Stars
   let stars = 0;
-  if(!gameOver){
+  if(!gameOver && !practice){
     if(g.score > 1200) stars = 1;
     if(g.score > 3500) stars = 2;
     if(g.score > 6500 && acc > 85) stars = 3;
@@ -1167,8 +1515,8 @@ function showResults(g, gameOver){
     starsBox.appendChild(s);
   }
 
-  // Save progress
-  if(!gameOver){
+  // Save progress (only in non-practice)
+  if(!gameOver && !practice){
     const id = state.currentLevelId;
     if(!state.highScores[id] || g.score > state.highScores[id]){
       state.highScores[id] = g.score;
@@ -1178,11 +1526,11 @@ function showResults(g, gameOver){
       state.unlockedLevels.push(next);
       setTimeout(()=>showToast('Next level unlocked!'), 600);
     }
+    saveState();
   }
 
-  // Next button
   const nb = document.getElementById('next-level-btn');
-  if(gameOver || state.currentLevelId >= levels.length){
+  if(gameOver || practice || state.currentLevelId >= levels.length){
     nb.style.display = 'none';
   } else {
     nb.style.display = '';
@@ -1210,11 +1558,21 @@ document.addEventListener('keydown', (e)=>{
       game.handleKey(lane);
       return;
     }
-    if(e.key === ' '){ e.preventDefault(); togglePause(); return; }
+    if(e.key === ' ' || k === 'p'){ e.preventDefault(); togglePause(); return; }
     if(e.key === 'Escape'){ quitGame(); return; }
   }
   if(state.screen !== 'game'){
     if(e.key === 'Enter' && state.screen==='start'){ showLevels(); }
+  }
+});
+
+document.addEventListener('keyup', (e)=>{
+  if(state.screen==='game' && game){
+    const k = e.key.toLowerCase();
+    const lane = LANE_KEYS.indexOf(k);
+    if(lane>=0){
+      game.handleKeyUp(lane);
+    }
   }
 });
 
@@ -1242,6 +1600,7 @@ document.getElementById('audio-toggle').addEventListener('click', ()=>{
   btn.classList.toggle('toggled-off', !state.audioEnabled);
   showToast(state.audioEnabled ? 'Sound on' : 'Sound off');
   if(state.audioEnabled) ensureAudio();
+  saveState();
 });
 
 document.getElementById('motion-toggle').addEventListener('click', ()=>{
@@ -1250,9 +1609,22 @@ document.getElementById('motion-toggle').addEventListener('click', ()=>{
   const btn = document.getElementById('motion-toggle');
   btn.classList.toggle('toggled-off', state.motionReduced);
   showToast(state.motionReduced ? 'Reduced motion on' : 'Reduced motion off');
+  saveState();
+});
+
+document.getElementById('practice-toggle')?.addEventListener('click', ()=>{
+  state.practiceMode = !state.practiceMode;
+  syncPracticeUI();
+  saveState();
+  showToast(state.practiceMode ? 'Practice mode ON — infinite lives, slower speed' : 'Practice mode OFF');
 });
 
 /* ---------- Init ---------- */
+loadState();
+syncPracticeUI();
+document.body.classList.toggle('reduced-motion', state.motionReduced);
+document.getElementById('audio-toggle')?.classList.toggle('toggled-off', !state.audioEnabled);
+document.getElementById('motion-toggle')?.classList.toggle('toggled-off', state.motionReduced);
 renderLevels();
 </script>
 </body>
