@@ -1,0 +1,15 @@
+{
+  "name": "arcanum-mp-server",
+  "version": "1.0.0",
+  "description": "Matchmaking + move-relay server for Arcanum's Duel Online mode.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
