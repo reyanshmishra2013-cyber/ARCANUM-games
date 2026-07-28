@@ -103,7 +103,7 @@ function beginConnecting() {
   try {
     socket = new WebSocket(MP_SERVER_URL);
   } catch (e) {
-    setMpStatus('error', "Couldn't reach the relay server. Check your connection and try again.");
+    setMpStatus('error', "Couldn't reach Check your connection and try again.");
     return;
   }
   MP.socket = socket;
@@ -244,7 +244,7 @@ function announceMpOpponentLeft() {
   MP.socket = null;
 
   document.getElementById('modalTitle').textContent = 'Opponent Left';
-  document.getElementById('modalSubtitle').textContent = 'They disconnected — no result was recorded';
+  document.getElementById('modalSubtitle').textContent = 'the opponent disconnected  no result';
   const badgeSlot = document.getElementById('modalProfileBadge');
   if (badgeSlot) { badgeSlot.style.display = 'none'; badgeSlot.innerHTML = ''; }
   document.getElementById('modalChallengeResult').style.display = 'none';

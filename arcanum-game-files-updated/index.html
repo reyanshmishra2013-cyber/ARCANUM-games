@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arcanum — Unveil the Sacred Sigils</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="cosmos-bg"></div>
+<div class="aurora"></div>
+<canvas id="starfield"></canvas>
+
+<div class="splash-screen" id="splashScreen" role="presentation">
+  <svg class="splash-seal" viewBox="0 0 56 56" aria-hidden="true">
+    <defs>
+      <linearGradient id="splashGoldGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#fff5d6"/>
+        <stop offset="0.5" stop-color="#e8b65a"/>
+        <stop offset="1" stop-color="#a87a30"/>
+      </linearGradient>
+    </defs>
+    <circle cx="28" cy="28" r="26" fill="none" stroke="url(#splashGoldGrad)" stroke-width="1"/>
+    <circle cx="28" cy="28" r="20" fill="none" stroke="url(#splashGoldGrad)" stroke-width="0.6" opacity="0.6"/>
+    <circle cx="28" cy="28" r="14" fill="none" stroke="url(#splashGoldGrad)" stroke-width="0.5" opacity="0.4"/>
+    <path d="M28 4 L28 52 M4 28 L52 28" stroke="url(#splashGoldGrad)" stroke-width="0.4" opacity="0.5"/>
+    <path d="M11 11 L45 45 M45 11 L11 45" stroke="url(#splashGoldGrad)" stroke-width="0.3" opacity="0.4"/>
+    <circle cx="28" cy="28" r="3.5" fill="url(#splashGoldGrad)"/>
+    <circle cx="28" cy="6" r="1.5" fill="url(#splashGoldGrad)"/>
+    <circle cx="28" cy="50" r="1.5" fill="url(#splashGoldGrad)"/>
+    <circle cx="6" cy="28" r="1.5" fill="url(#splashGoldGrad)"/>
+    <circle cx="50" cy="28" r="1.5" fill="url(#splashGoldGrad)"/>
+  </svg>
+  <div class="splash-title">
+    <h1>ARCANUM</h1>
+    <p>Unveil the Sacred Sigils</p>
+  </div>
+  <div class="splash-hint">Tap to begin</div>
+</div>
+
+<main>
+  <header class="app-header">
+    <div class="brand">
+      <svg class="brand-seal" viewBox="0 0 56 56" aria-hidden="true">
+        <defs>
+          <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#fff5d6"/>
+            <stop offset="0.5" stop-color="#e8b65a"/>
+            <stop offset="1" stop-color="#a87a30"/>
+          </linearGradient>
+        </defs>
+        <circle cx="28" cy="28" r="26" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+        <circle cx="28" cy="28" r="20" fill="none" stroke="url(#goldGrad)" stroke-width="0.6" opacity="0.6"/>
+        <circle cx="28" cy="28" r="14" fill="none" stroke="url(#goldGrad)" stroke-width="0.5" opacity="0.4"/>
+        <path d="M28 4 L28 52 M4 28 L52 28" stroke="url(#goldGrad)" stroke-width="0.4" opacity="0.5"/>
+        <path d="M11 11 L45 45 M45 11 L11 45" stroke="url(#goldGrad)" stroke-width="0.3" opacity="0.4"/>
+        <circle cx="28" cy="28" r="3.5" fill="url(#goldGrad)"/>
+        <circle cx="28" cy="6" r="1.5" fill="url(#goldGrad)"/>
+        <circle cx="28" cy="50" r="1.5" fill="url(#goldGrad)"/>
+        <circle cx="6" cy="28" r="1.5" fill="url(#goldGrad)"/>
+        <circle cx="50" cy="28" r="1.5" fill="url(#goldGrad)"/>
+      </svg>
+      <div class="brand-text">
+        <h1>ARCANUM</h1>
+        <p>Unveil the Sacred Sigils</p>
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat" id="streakStat">
+        <div class="stat-label">Streak</div>
+        <div class="stat-value" id="streakVal">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Moves</div>
+        <div class="stat-value" id="movesVal">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Pairs</div>
+        <div class="stat-value" id="pairsVal">0/8</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label" id="timeLabel">Time</div>
+        <div class="stat-value" id="timeVal">0:00</div>
+      </div>
+      <div class="stat" id="livesStat" style="display:none;">
+        <div class="stat-label">Sigils</div>
+        <div class="stat-value" id="livesVal">♦♦♦</div>
+      </div>
+      <div class="stat aether-stat" id="aetherStat" title="Aether — spend to unlock themes">
+        <div class="stat-label">Aether</div>
+        <div class="stat-value" id="aetherVal">0</div>
+      </div>
+      <button class="stat rite-points-stat" id="ritePointsStat" title="This week's Rite Points — click for the full breakdown">
+        <div class="stat-label">This Week</div>
+        <div class="stat-value" id="ritePointsVal">0 pts</div>
+      </button>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="musicToggle" aria-label="Toggle music">
+        <span class="music-icon-static" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </span>
+        <span class="music-wave" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+        <span id="musicLabel">Music</span>
+      </button>
+      <button class="btn" id="resetBtn" aria-label="Reset game">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+        <span>Reset</span>
+      </button>
+      <button class="btn" id="helpBtn" aria-label="Show tutorial" title="How to play">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>Help</span>
+      </button>
+      <button class="btn" id="chronicleBtn" aria-label="View chronicle" title="Achievements &amp; stats">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>Chronicle</span>
+      </button>
+      <button class="btn" id="settingsBtn" aria-label="Open settings" title="Settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </button>
+    </div>
+  </header>
+
+  <section class="powerup-bar" id="powerupBar" style="display:none;">
+    <button class="btn powerup-btn" id="peekBtn" data-cost="40" title="Briefly reveal every sigil on the board">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      <span>Seer's Glimpse <em>· 40✦</em></span>
+    </button>
+    <button class="btn powerup-btn" id="swapBtn" data-cost="50" title="Forgive your last move — erases 1 move from your count">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      <span>Fate's Pardon <em>· 50✦</em></span>
+    </button>
+    <button class="btn powerup-btn" id="freezeBtn" data-cost="45" style="display:none;" title="Pause the hourglass for 5 seconds">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M5 5l14 14M19 5L5 19"/></svg>
+      <span>Chronomancer's Freeze <em>· 45✦</em></span>
+    </button>
+    <button class="btn powerup-btn" id="wardBtn" data-cost="60" style="display:none;" title="Restore one lost sigil">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+      <span>Umbral Ward <em>· 60✦</em></span>
+    </button>
+  </section>
+
+  <div class="duel-hud" id="duelHud" style="display:none;">
+    <div class="duel-turn-banner" id="duelTurnBanner">Player 1's Turn</div>
+    <div class="duel-scores">
+      <div class="duel-score-card active" id="duelP1Card">
+        <span class="duel-player-name" id="duelP1Name">Player 1</span>
+        <span class="duel-player-score" id="duelP1Score">0</span>
+      </div>
+      <div class="duel-score-card" id="duelP2Card">
+        <span class="duel-player-name" id="duelP2Name">Player 2</span>
+        <span class="duel-player-score" id="duelP2Score">0</span>
+      </div>
+    </div>
+    <div class="ai-memory-control" id="aiMemoryControl" style="display:none;">
+      <label for="aiMemorySlider">Sphinx Memory <span id="aiMemoryVal">6</span></label>
+      <input type="range" id="aiMemorySlider" min="2" max="16" step="1" value="6">
+    </div>
+  </div>
+
+  <div class="challenge-banner" id="challengeBanner" style="display:none;"></div>
+
+  <section class="board-container">
+    <div class="board" id="board" role="grid" aria-label="Memory game board"></div>
+    <div id="boardAnnouncer" aria-live="polite" class="sr-only"></div>
+  </section>
+
+  <div class="rites-select-row">
+    <button class="btn rites-btn" id="ritesBtn" aria-haspopup="dialog">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 L14.5 9 L22 9 L16 13.5 L18 21 L12 16.5 L6 21 L8 13.5 L2 9 L9.5 9 Z"/></svg>
+      <span>Rites</span>
+      <span class="rites-current" id="ritesCurrentLabel">The Vigil</span>
+    </button>
+    <button class="btn rites-btn" id="pathsBtn" aria-haspopup="dialog">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20L3 17V4l6 3m0 13l6-3m-6 3V7m6 10l6 3V7l-6-3m0 13V4m0 0L9 7"/></svg>
+      <span>Paths</span>
+      <span class="rites-current" id="pathsCurrentLabel">Initiate</span>
+    </button>
+    <button class="btn rites-btn" id="sigilsBtn" aria-haspopup="dialog">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>
+      <span>Sigils</span>
+      <span class="rites-current" id="sigilsCurrentLabel">Celestial</span>
+    </button>
+    <button class="btn rites-btn" id="shopBtn" aria-haspopup="dialog">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+      <span>Shop</span>
+    </button>
+  </div>
+
+</main>
+
+<div class="legal-footer">
+  <button class="legal-link" data-legal="terms">Terms &amp; Conditions</button>
+  <span class="legal-sep">•</span>
+  <button class="legal-link" data-legal="privacy">Privacy Policy</button>
+</div>
+
+<div id="scrollbar-track"><div id="scrollbar-thumb"></div></div>
+
+<div class="modal-overlay" id="legalModal" role="dialog" aria-modal="true">
+  <div class="modal legal-modal">
+    <svg class="modal-rune" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r="24" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+      <path d="M28 8 L34 28 L52 28 L38 40 L44 56 L28 46 L12 56 L18 40 L4 28 L22 28 Z"
+            fill="url(#goldGrad)" opacity="0.85"/>
+    </svg>
+    <h2 id="legalTitle"></h2>
+    <div class="legal-content" id="legalContent"></div>
+    <button class="btn btn-primary" id="legalCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="tutorialModal" role="dialog" aria-modal="true">
+  <div class="modal tutorial-modal">
+    <svg class="modal-rune" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r="24" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+      <path d="M28 8 L34 28 L52 28 L38 40 L44 56 L28 46 L12 56 L18 40 L4 28 L22 28 Z" fill="url(#goldGrad)" opacity="0.85"/>
+    </svg>
+    <h2>The Spheres Await</h2>
+    <p class="modal-subtitle">A primer on the rites before you</p>
+    <div class="tutorial-content">
+      <div class="tutorial-section">
+        <h3>How to Play</h3>
+        <p>Flip two cards at a time to reveal the celestial sigils hidden within. Match a pair of identical symbols to clear them from the board. Clear every pair to complete the rite. Consecutive matches build a <strong>streak</strong> — and with it, the spheres sing louder.</p>
+      </div>
+      <div class="tutorial-section">
+        <h3>The Rites — Game Modes</h3>
+        <div class="tutorial-item"><span class="tutorial-name">✦ The Vigil <em style="color: var(--muted); font-style: italic; font-size: 11px;">— Signature Rite</em></span><span class="tutorial-desc">The classic rite. Match at your own pace with no external pressure — this is ARCANUM at its purest.</span></div>
+        <div class="tutorial-item"><span class="tutorial-name">Shifting Veil</span><span class="tutorial-desc">Unclaimed sigils quietly trade places every so often. Trust your memory, not the map.</span></div>
+        <div class="tutorial-item"><span class="tutorial-name">Chronomancer's Rite</span><span class="tutorial-desc">A countdown hangs over every move. Clear the board before the hourglass runs dry.</span></div>
+        <div class="tutorial-item"><span class="tutorial-name">Umbral Trial</span><span class="tutorial-desc">You carry three sigils. Each miss shatters one. Lose all three and the trial ends.</span></div>
+        <div class="tutorial-item"><span class="tutorial-name">Fate's Gambit</span><span class="tutorial-desc">The oracle grants a limited number of moves. Spend them wisely or be undone.</span></div>
+      </div>
+      <div class="tutorial-section">
+        <h3>Sigils &amp; The Chronicle</h3>
+        <p>New card themes and the story of your journey — games played, win rate, and the achievements you've earned — are unlocked as you play. Open <strong>Chronicle</strong> from the header at any time to see your progress.</p>
+      </div>
+      <div class="tutorial-section">
+        <h3>The Paths — Difficulty</h3>
+        <div class="tutorial-item"><span class="tutorial-name">Initiate · 4×4</span><span class="tutorial-desc">Eight pairs. The first step on the celestial path.</span></div>
+        <div class="tutorial-item"><span class="tutorial-name">Seeker · 6×4</span><span class="tutorial-desc">Twelve pairs. The spheres demand more of your focus.</span></div>
+        <div class="tutorial-item"><span class="tutorial-name">Archmage · 6×6</span><span class="tutorial-desc">Eighteen pairs. Only a true master of memory prevails.</span></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="tutorialBeginBtn">Begin</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="pathsModal" role="dialog" aria-modal="true">
+  <div class="modal tutorial-modal">
+    <svg class="modal-rune" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r="24" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+      <path d="M28 8 L34 28 L52 28 L38 40 L44 56 L28 46 L12 56 L18 40 L4 28 L22 28 Z" fill="url(#goldGrad)" opacity="0.85"/>
+    </svg>
+    <h2>Choose a Path</h2>
+    <p class="modal-subtitle">How wide a board will you face?</p>
+    <div class="tutorial-content">
+      <div class="rites-option-list">
+        <button class="btn rite-option active" data-diff="apprentice">
+          <span class="rite-option-name">Initiate · 4×4</span>
+          <span class="rite-option-desc">Eight pairs. The first step on the celestial path.</span>
+        </button>
+        <button class="btn rite-option" data-diff="adept">
+          <span class="rite-option-name">Seeker · 6×4</span>
+          <span class="rite-option-desc">Twelve pairs. The spheres demand more of your focus.</span>
+        </button>
+        <button class="btn rite-option" data-diff="master">
+          <span class="rite-option-name">Archmage · 6×6</span>
+          <span class="rite-option-desc">Eighteen pairs. Only a true master of memory prevails.</span>
+        </button>
+      </div>
+      <div class="custom-path-control" id="customPathControl">
+        <label for="customPairsSlider">Custom Path <span id="customPairsVal">10 pairs</span></label>
+        <input type="range" id="customPairsSlider" min="6" max="18" step="1" value="10">
+        <button class="btn rite-option" id="useCustomPathBtn">
+          <span class="rite-option-name">Use Custom Path</span>
+          <span class="rite-option-desc">Pick any pair count from 6 to 18 — something between the fixed Paths.</span>
+        </button>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="pathsCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="sigilsModal" role="dialog" aria-modal="true">
+  <div class="modal tutorial-modal">
+    <svg class="modal-rune" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r="24" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+      <path d="M28 8 L34 28 L52 28 L38 40 L44 56 L28 46 L12 56 L18 40 L4 28 L22 28 Z" fill="url(#goldGrad)" opacity="0.85"/>
+    </svg>
+    <h2>Choose a Sigil Set</h2>
+    <p class="modal-subtitle">Earn or unlock new card faces to play with</p>
+    <div class="tutorial-content">
+      <div class="rites-option-list theme-bar" id="themeBar"></div>
+    </div>
+    <button class="btn btn-primary" id="sigilsCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="shopModal" role="dialog" aria-modal="true">
+  <div class="modal tutorial-modal">
+    <svg class="modal-rune" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r="24" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+      <path d="M28 8 L34 28 L52 28 L38 40 L44 56 L28 46 L12 56 L18 40 L4 28 L22 28 Z" fill="url(#goldGrad)" opacity="0.85"/>
+    </svg>
+    <h2>The Aether Shop</h2>
+    <p class="modal-subtitle">Cosmetics for the devoted, once every sigil is yours</p>
+    <div class="tutorial-content" id="shopContent"></div>
+    <button class="btn btn-primary" id="shopCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ritesModal" role="dialog" aria-modal="true">
+  <div class="modal tutorial-modal">
+    <svg class="modal-rune" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r="24" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+      <path d="M28 8 L34 28 L52 28 L38 40 L44 56 L28 46 L12 56 L18 40 L4 28 L22 28 Z" fill="url(#goldGrad)" opacity="0.85"/>
+    </svg>
+    <h2>Choose a Rite</h2>
+    <p class="modal-subtitle">Each rite bends the rules of the memory game</p>
+    <div class="tutorial-content">
+      <div class="rites-option-list">
+        <button class="btn rite-option" data-mode="veil">
+          <span class="rite-option-name">Shifting Veil</span>
+          <span class="rite-option-desc">The board reshuffles itself as you play.</span>
+        </button>
+        <button class="btn rite-option active" data-mode="classic">
+          <span class="rite-option-name">✦ The Vigil</span>
+          <span class="rite-option-desc">The classic rite — no twists, just memory.</span>
+        </button>
+        <button class="btn rite-option" data-mode="timed">
+          <span class="rite-option-name">Chronomancer's Rite</span>
+          <span class="rite-option-desc">Clear the board before the hourglass runs dry.</span>
+        </button>
+        <button class="btn rite-option" data-mode="hard">
+          <span class="rite-option-name">Umbral Trial</span>
+          <span class="rite-option-desc">Three sigils. Each miss shatters one.</span>
+        </button>
+        <button class="btn rite-option" data-mode="oracle">
+          <span class="rite-option-name">Fate's Gambit</span>
+          <span class="rite-option-desc">A limited number of moves. Spend them wisely.</span>
+        </button>
+        <button class="btn rite-option" data-mode="duel">
+          <span class="rite-option-name">⚔ Duel</span>
+          <span class="rite-option-desc">Pass-and-play, head to head.</span>
+        </button>
+        <button class="btn rite-option" data-mode="aiduel">
+          <span class="rite-option-name">⚔ vs. Sphinx</span>
+          <span class="rite-option-desc">Face a bot with adjustable memory.</span>
+        </button>
+        <button class="btn rite-option" data-mode="mp">
+          <span class="rite-option-name">⚔ Duel Online</span>
+          <span class="rite-option-desc">Real-time 1v1 against another player, matched instantly.</span>
+        </button>
+        <button class="btn rite-option" data-mode="daily">
+          <span class="rite-option-name">☾ Daily Rite</span>
+          <span class="rite-option-desc">The same seeded board for everyone, every day.</span>
+        </button>
+        <button class="btn rite-option" data-mode="weekly">
+          <span class="rite-option-name">⚔ Weekly Rite</span>
+          <span class="rite-option-desc">A bigger seeded board shared by everyone, all week long.</span>
+        </button>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="ritesCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mpModal" role="dialog" aria-modal="true">
+  <div class="modal tutorial-modal">
+    <svg class="modal-rune" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r="24" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+      <path d="M28 8 L34 28 L52 28 L38 40 L44 56 L28 46 L12 56 L18 40 L4 28 L22 28 Z" fill="url(#goldGrad)" opacity="0.85"/>
+    </svg>
+    <h2>Duel Online</h2>
+    <p class="modal-subtitle">Real-time, 1v1, against another wanderer</p>
+    <div class="tutorial-content">
+      <div class="settings-row" id="mpNicknameRow">
+        <label for="mpNicknameInput">Your name</label>
+        <input type="text" id="mpNicknameInput" maxlength="18" placeholder="Wanderer">
+      </div>
+      <div class="mp-status">
+        <div class="mp-spinner" id="mpSpinner" style="display:none;" aria-hidden="true"></div>
+        <p id="mpStatusText">Find a real opponent for a live, real-time duel.</p>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="mpFindMatchBtn">Find Opponent</button>
+      <button class="btn" id="mpCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsModal" role="dialog" aria-modal="true">
+  <div class="modal tutorial-modal settings-modal">
+    <svg class="modal-rune" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r="24" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+      <path d="M28 8 L34 28 L52 28 L38 40 L44 56 L28 46 L12 56 L18 40 L4 28 L22 28 Z" fill="url(#goldGrad)" opacity="0.85"/>
+    </svg>
+    <h2>Settings</h2>
+    <p class="modal-subtitle">Attune the rite to your senses</p>
+    <div class="tutorial-content">
+      <div class="tutorial-section">
+        <h3>Sound</h3>
+        <div class="settings-row">
+          <label for="musicVolumeSlider">Music Volume <span id="musicVolumeVal">80%</span></label>
+          <input type="range" id="musicVolumeSlider" min="0" max="100" step="5" value="80">
+        </div>
+        <div class="settings-row">
+          <label for="sfxVolumeSlider">Sound Effects <span id="sfxVolumeVal">85%</span></label>
+          <input type="range" id="sfxVolumeSlider" min="0" max="100" step="5" value="85">
+        </div>
+      </div>
+      <div class="tutorial-section">
+        <h3>Accessibility</h3>
+        <div class="settings-toggle-row">
+          <div>
+            <span class="settings-toggle-label">Reduced Motion</span>
+            <span class="settings-toggle-desc">Minimize animations, particles, and screen effects — independent of your device setting.</span>
+          </div>
+          <button class="toggle-switch" id="reducedMotionToggle" role="switch" aria-checked="false" aria-label="Toggle reduced motion"><span class="toggle-knob"></span></button>
+        </div>
+        <div class="settings-toggle-row">
+          <div>
+            <span class="settings-toggle-label">Colorblind-Safe Palette</span>
+            <span class="settings-toggle-desc">Swap the red/green match cues for a blue/orange palette that's easier to distinguish.</span>
+          </div>
+          <button class="toggle-switch" id="colorblindToggle" role="switch" aria-checked="false" aria-label="Toggle colorblind-safe palette"><span class="toggle-knob"></span></button>
+        </div>
+        <div class="settings-toggle-row">
+          <div>
+            <span class="settings-toggle-label">High Contrast Mode</span>
+            <span class="settings-toggle-desc">Boost text and border contrast against the background for easier reading.</span>
+          </div>
+          <button class="toggle-switch" id="highContrastToggle" role="switch" aria-checked="false" aria-label="Toggle high contrast mode"><span class="toggle-knob"></span></button>
+        </div>
+        <div class="settings-toggle-row">
+          <div>
+            <span class="settings-toggle-label">Screen Shake</span>
+            <span class="settings-toggle-desc">Turn off the camera shake on big combos and misses.</span>
+          </div>
+          <button class="toggle-switch on" id="screenShakeToggle" role="switch" aria-checked="true" aria-label="Toggle screen shake"><span class="toggle-knob"></span></button>
+        </div>
+        <div class="settings-row">
+          <label for="uiScaleSlider">UI Scale <span id="uiScaleVal">100%</span></label>
+          <input type="range" id="uiScaleSlider" min="85" max="130" step="5" value="100">
+        </div>
+      </div>
+      <div class="tutorial-section">
+        <h3>Gameplay</h3>
+        <div class="settings-toggle-row">
+          <div>
+            <span class="settings-toggle-label">Confirm Before Reset</span>
+            <span class="settings-toggle-desc">Ask before Reset discards an in-progress rite.</span>
+          </div>
+          <button class="toggle-switch on" id="confirmResetToggle" role="switch" aria-checked="true" aria-label="Toggle confirm before reset"><span class="toggle-knob"></span></button>
+        </div>
+        <div class="settings-row">
+          <label for="hapticsSlider">Haptics Intensity <span id="hapticsVal">Full</span></label>
+          <input type="range" id="hapticsSlider" min="0" max="2" step="1" value="2">
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="settingsCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="chronicleModal" role="dialog" aria-modal="true">
+  <div class="modal tutorial-modal">
+    <svg class="modal-rune" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r="24" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+      <path d="M28 8 L34 28 L52 28 L38 40 L44 56 L28 46 L12 56 L18 40 L4 28 L22 28 Z" fill="url(#goldGrad)" opacity="0.85"/>
+    </svg>
+    <h2>The Chronicle</h2>
+    <p class="modal-subtitle">Your journey among the spheres</p>
+    <div class="profile-badge-slot" id="chronicleProfileBadge"></div>
+    <div class="tutorial-content">
+      <div class="modal-stats chronicle-stats" id="chronicleStats"></div>
+      <div class="tutorial-section">
+        <h3>Daily Rite</h3>
+        <div id="chronicleDaily"></div>
+      </div>
+      <div class="tutorial-section">
+        <h3>Weekly Rite</h3>
+        <div id="chronicleWeekly"></div>
+      </div>
+      <div class="tutorial-section">
+        <h3>Rite Points <em style="color: var(--muted); font-style: italic; font-size: 11px;">— CrazyGames Leaderboard</em></h3>
+        <div id="chronicleRitePoints"></div>
+      </div>
+      <div class="tutorial-section">
+        <h3>Personal Bests</h3>
+        <div id="chronicleBests"></div>
+      </div>
+      <div class="tutorial-section" id="prestigeSection" style="display:none;">
+        <h3>Ascension</h3>
+        <div class="daily-summary">
+          <div class="daily-summary-row">
+            <span>Rank</span>
+            <span id="prestigeRankLabel">Initiate</span>
+          </div>
+          <div class="daily-summary-row">
+            <span>Aether Bonus</span>
+            <span id="prestigeBonusLabel">+0%</span>
+          </div>
+        </div>
+        <p class="prestige-note" id="prestigeNote"></p>
+        <button class="btn btn-primary" id="ascendBtn" style="display:none;">Ascend</button>
+      </div>
+      <div class="tutorial-section">
+        <h3>Achievements</h3>
+        <div id="achievementList"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="chronicleCloseBtn">Close</button>
+      <button class="btn" id="exportChronicleBtn" aria-label="Export chronicle as image">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        <span>Export</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal">
+    <svg class="modal-rune" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r="24" fill="none" stroke="url(#goldGrad)" stroke-width="1"/>
+      <path d="M28 8 L34 28 L52 28 L38 40 L44 56 L28 46 L12 56 L18 40 L4 28 L22 28 Z"
+            fill="url(#goldGrad)" opacity="0.85"/>
+    </svg>
+    <h2 id="modalTitle">Mastery Achieved</h2>
+    <p class="modal-subtitle" id="modalSubtitle">The cosmos align in your favor</p>
+    <div class="profile-badge-slot" id="modalProfileBadge"></div>
+    <p class="modal-challenge-result" id="modalChallengeResult" style="display:none;"></p>
+
+    <div class="stars" id="starsContainer"></div>
+
+    <div class="modal-stats">
+      <div>
+        <div class="modal-stat-value" id="finalMoves">0</div>
+        <div class="modal-stat-label">Moves</div>
+      </div>
+      <div>
+        <div class="modal-stat-value" id="finalTime">0:00</div>
+        <div class="modal-stat-label">Time</div>
+      </div>
+      <div>
+        <div class="modal-stat-value" id="finalStreak">0</div>
+        <div class="modal-stat-label">Best Streak</div>
+      </div>
+      <div>
+        <div class="modal-stat-value" id="finalAccuracy">0%</div>
+        <div class="modal-stat-label">Accuracy</div>
+      </div>
+      <div>
+        <div class="modal-stat-value" id="finalAetherEarned">0✦</div>
+        <div class="modal-stat-label">Aether Earned</div>
+      </div>
+    </div>
+    <div class="modal-personal-best" id="modalPersonalBest" style="display:none;">New Personal Best!</div>
+
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="playAgainBtn">New Game</button>
+      <button class="btn" id="shareResultBtn" aria-label="Share result as image">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        <span>Share</span>
+      </button>
+      <button class="btn" id="challengeLinkBtn" aria-label="Copy challenge link" style="display:none;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span>Challenge a Friend</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<canvas id="confetti" aria-hidden="true"></canvas>
+<canvas id="shareCanvas" style="display:none;"></canvas>
+
+
+<script src="js/sdk.js"></script>
+<script src="js/content.js"></script>
+<script src="js/progress.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/game.js"></script>
+<script src="js/effects.js"></script>
+<script src="js/controls.js"></script>
+<script src="js/multiplayer.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/shop.js"></script>
+<script src="js/daily.js"></script>
+<script src="js/weekly.js"></script>
+<script src="js/leaderboard.js"></script>
+<script src="js/powerups.js"></script>
+<script src="js/aiduel.js"></script>
+<script src="js/share.js"></script>
+<script src="js/legal-tutorial.js"></script>
+</body>
+</html>
