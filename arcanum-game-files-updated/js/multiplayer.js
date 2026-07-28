@@ -227,12 +227,26 @@ function leaveMultiplayerMatch() {
 
 function handleMpMessage(msg) {
   switch (msg.type) {
-    case 'queued':
-      setMpStatus('queued', 'Searching for an opponent…');
-      if (MP.roomCode) {
-        crazySdk.game.updateRoom({ roomId: MP.roomCode, isJoinable: true, inviteParams: { roomCode: MP.roomCode } });
+    case 'matchStart': {
+      if (MP.connectTimeout) { clearTimeout(MP.connectTimeout); MP.connectTimeout = null; }
+      MP.youAre = msg.youAre;
+      MP.opponentName = msg.opponentName;
+      MP.status = 'matched';
+      STATE.mode = 'mp';
+      STATE.mpSeed = msg.seed;
+      closeMpModal();
+      
+     
+      if (window.CrazyGames && window.CrazyGames.SDK && window.CrazyGames.SDK.game) {
+          window.CrazyGames.SDK.game.updateRoom({
+              roomId: String(msg.seed),
+              isJoinable: true
+          });
       }
+
+      initGame();
       break;
+    }
 
     case 'matchStart': {
       if (MP.connectTimeout) { clearTimeout(MP.connectTimeout); MP.connectTimeout = null; }
