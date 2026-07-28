@@ -17,7 +17,7 @@
 // server/ (see server/README.md) — e.g. 'wss://arcanum-mp.onrender.com'.
 // Left blank, Duel Online tells the player it isn't set up yet instead
 // of hanging on a connection that will never succeed.
-const MP_SERVER_URL = '';
+const MP_SERVER_URL = 'wss://arcanum-server-x48a.onrender.com';
 
 const MP_NICKNAME_KEY = 'arcanum_mp_nickname';
 // Render's free tier spins a sleeping service back up on the next
