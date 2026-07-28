@@ -754,7 +754,8 @@ function updateDuelHud() {
   document.getElementById('duelP2Score').textContent = STATE.p2Pairs;
   const p1Label = (typeof mpSeatLabel === 'function' && mpSeatLabel(1)) || 'Player 1';
   const p2Label = STATE.mode === 'aiduel' ? 'The Sphinx' : ((typeof mpSeatLabel === 'function' && mpSeatLabel(2)) || 'Player 2');
-  banner.textContent = STATE.currentPlayer === 1 ? `${p1Label}'s Turn` : `${p2Label}'s Turn`;
+  const possessiveTurn = (label) => (label === 'You' ? 'Your Turn' : `${label}'s Turn`);
+  banner.textContent = STATE.currentPlayer === 1 ? possessiveTurn(p1Label) : possessiveTurn(p2Label);
   p1Card.classList.toggle('active', STATE.currentPlayer === 1);
   p2Card.classList.toggle('active', STATE.currentPlayer === 2);
 }
@@ -794,73 +795,83 @@ function completeGame() {
   if (ratio <= 1.6) stars = 3;
   else if (ratio <= 2.3) stars = 2;
 
-  // Update modal content
-  document.getElementById('modalSubtitle').textContent = STATE.mode === 'daily' ? 'The Daily Rite is complete' : 'The cosmos align in your favor';
-  document.getElementById('modalTitle').textContent = STATE.mode === 'daily' ? 'Daily Rite Complete' : diff.title;
-  document.getElementById('finalMoves').textContent = STATE.moves;
-  const mins = Math.floor(STATE.elapsedTime / 60);
-  const secs = STATE.elapsedTime % 60;
-  document.getElementById('finalTime').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-  document.getElementById('finalStreak').textContent = STATE.maxStreak;
-  const accuracy = STATE.moves > 0 ? Math.min(100, Math.round((diff.pairs / STATE.moves) * 100)) : 100;
-  const finalAccuracyEl = document.getElementById('finalAccuracy');
-  if (finalAccuracyEl) {
-    finalAccuracyEl.closest('div').style.display = '';
-    finalAccuracyEl.textContent = `${accuracy}%`;
-  }
-  document.getElementById('finalAetherEarned').textContent = `${aetherEarned}✦`;
-  const bestBadge = document.getElementById('modalPersonalBest');
-  if (bestBadge) bestBadge.style.display = isNewBest ? '' : 'none';
-
-  const isSeededMode = STATE.mode === 'daily' || STATE.mode === 'weekly';
-  const challengeBtn = document.getElementById('challengeLinkBtn');
-  if (challengeBtn) challengeBtn.style.display = isSeededMode ? '' : 'none';
-
-  const challengeResultEl = document.getElementById('modalChallengeResult');
-  if (challengeResultEl) {
-    const challenge = (typeof INCOMING_CHALLENGE !== 'undefined') ? INCOMING_CHALLENGE : null;
-    if (isSeededMode && challenge && challenge.mode === STATE.mode && challenge.seed === STATE.dailySeed) {
-      const beat = STATE.moves < challenge.moves || (STATE.moves === challenge.moves && STATE.elapsedTime < challenge.time);
-      const tied = STATE.moves === challenge.moves && STATE.elapsedTime === challenge.time;
-      challengeResultEl.textContent = tied
-        ? `Tied your friend's challenge — ${challenge.moves} moves`
-        : beat
-          ? `You beat the challenge! (${challenge.moves} moves to beat)`
-          : `Your friend's challenge: ${challenge.moves} moves — try again to beat it`;
-      challengeResultEl.style.display = '';
-    } else {
-      challengeResultEl.style.display = 'none';
+  try {
+    // Update modal content
+    document.getElementById('modalSubtitle').textContent = STATE.mode === 'daily' ? 'The Daily Rite is complete' : 'The cosmos align in your favor';
+    document.getElementById('modalTitle').textContent = STATE.mode === 'daily' ? 'Daily Rite Complete' : diff.title;
+    document.getElementById('finalMoves').textContent = STATE.moves;
+    const mins = Math.floor(STATE.elapsedTime / 60);
+    const secs = STATE.elapsedTime % 60;
+    document.getElementById('finalTime').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    document.getElementById('finalStreak').textContent = STATE.maxStreak;
+    const accuracy = STATE.moves > 0 ? Math.min(100, Math.round((diff.pairs / STATE.moves) * 100)) : 100;
+    const finalAccuracyEl = document.getElementById('finalAccuracy');
+    if (finalAccuracyEl) {
+      finalAccuracyEl.closest('div').style.display = '';
+      finalAccuracyEl.textContent = `${accuracy}%`;
     }
-  }
+    const finalAetherEl = document.getElementById('finalAetherEarned');
+    if (finalAetherEl) finalAetherEl.textContent = `${aetherEarned}✦`;
+    const bestBadge = document.getElementById('modalPersonalBest');
+    if (bestBadge) bestBadge.style.display = isNewBest ? '' : 'none';
 
-  // Render stars
-  const starsContainer = document.getElementById('starsContainer');
-  starsContainer.innerHTML = '';
-  for (let i = 0; i < 3; i++) {
-    const star = document.createElement('div');
-    star.className = 'star';
-    star.innerHTML = `
-      <svg viewBox="0 0 60 60" width="64" height="64">
-        <defs>
-          <linearGradient id="starGrad${i}" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#fff5d6"/>
-            <stop offset="0.5" stop-color="#f4d27a"/>
-            <stop offset="1" stop-color="#a87a30"/>
-          </linearGradient>
-        </defs>
-        <path d="M30 4 L37 22 L56 22 L41 33 L47 52 L30 41 L13 52 L19 33 L4 22 L23 22 Z"
-              fill="url(#starGrad${i})"
-              stroke="#fff5d6"
-              stroke-width="1.2"/>
-      </svg>
-    `;
-    starsContainer.appendChild(star);
-    setTimeout(() => {
-      if (i < stars) {
-        star.classList.add('lit');
-        addStarSparkles(star);
+    const isSeededMode = STATE.mode === 'daily' || STATE.mode === 'weekly';
+    const challengeBtn = document.getElementById('challengeLinkBtn');
+    if (challengeBtn) challengeBtn.style.display = isSeededMode ? '' : 'none';
+
+    const challengeResultEl = document.getElementById('modalChallengeResult');
+    if (challengeResultEl) {
+      const challenge = (typeof INCOMING_CHALLENGE !== 'undefined') ? INCOMING_CHALLENGE : null;
+      if (isSeededMode && challenge && challenge.mode === STATE.mode && challenge.seed === STATE.dailySeed) {
+        const beat = STATE.moves < challenge.moves || (STATE.moves === challenge.moves && STATE.elapsedTime < challenge.time);
+        const tied = STATE.moves === challenge.moves && STATE.elapsedTime === challenge.time;
+        challengeResultEl.textContent = tied
+          ? `Tied your friend's challenge — ${challenge.moves} moves`
+          : beat
+            ? `You beat the challenge! (${challenge.moves} moves to beat)`
+            : `Your friend's challenge: ${challenge.moves} moves — try again to beat it`;
+        challengeResultEl.style.display = '';
+      } else {
+        challengeResultEl.style.display = 'none';
       }
-    }, 700 + i * 320);
+    }
+
+    // Render stars
+    const starsContainer = document.getElementById('starsContainer');
+    if (starsContainer) {
+      starsContainer.innerHTML = '';
+      for (let i = 0; i < 3; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        star.innerHTML = `
+          <svg viewBox="0 0 60 60" width="64" height="64">
+            <defs>
+              <linearGradient id="starGrad${i}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#fff5d6"/>
+                <stop offset="0.5" stop-color="#f4d27a"/>
+                <stop offset="1" stop-color="#a87a30"/>
+              </linearGradient>
+            </defs>
+            <path d="M30 4 L37 22 L56 22 L41 33 L47 52 L30 41 L13 52 L19 33 L4 22 L23 22 Z"
+                  fill="url(#starGrad${i})"
+                  stroke="#fff5d6"
+                  stroke-width="1.2"/>
+          </svg>
+        `;
+        starsContainer.appendChild(star);
+        setTimeout(() => {
+          if (i < stars) {
+            star.classList.add('lit');
+            addStarSparkles(star);
+          }
+        }, 700 + i * 320);
+      }
+    }
+  } catch (e) {
+    // Same rationale as completeDuel(): one missing/renamed element must
+    // never silently take the rest of the modal (or the reveal below) down
+    // with it.
+    console.error('completeGame: modal population error', e);
   }
 
   setTimeout(() => {
@@ -886,42 +897,52 @@ function completeDuel() {
 
   const p1Label = (typeof mpSeatLabel === 'function' && mpSeatLabel(1)) || 'Player 1';
   const p2Label = STATE.mode === 'aiduel' ? 'The Sphinx' : ((typeof mpSeatLabel === 'function' && mpSeatLabel(2)) || 'Player 2');
+  const triumphs = (label) => (label === 'You' ? 'You Triumph' : `${label} Triumphs`);
   let title, subtitle;
   if (STATE.p1Pairs > STATE.p2Pairs) {
-    title = `${p1Label} Triumphs`;
+    title = triumphs(p1Label);
     subtitle = `${STATE.p1Pairs} pairs to ${STATE.p2Pairs}`;
   } else if (STATE.p2Pairs > STATE.p1Pairs) {
-    title = `${p2Label} Triumphs`;
+    title = triumphs(p2Label);
     subtitle = `${STATE.p2Pairs} pairs to ${STATE.p1Pairs}`;
   } else {
     title = 'The Spheres Are Tied';
     subtitle = `${STATE.p1Pairs} pairs apiece`;
   }
 
-  document.getElementById('modalTitle').textContent = title;
-  document.getElementById('modalSubtitle').textContent = subtitle;
-  document.getElementById('finalMoves').textContent = STATE.moves;
-  const mins = Math.floor(STATE.elapsedTime / 60);
-  const secs = STATE.elapsedTime % 60;
-  document.getElementById('finalTime').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-  document.getElementById('finalStreak').textContent = STATE.maxStreak;
-  const finalAccuracyEl = document.getElementById('finalAccuracy');
-  if (finalAccuracyEl) finalAccuracyEl.closest('div').style.display = 'none';
-  const finalAetherEl = document.getElementById('finalAetherEarned');
-  if (finalAetherEl) {
-    finalAetherEl.closest('div').style.display = '';
-    finalAetherEl.textContent = `${duelAetherEarned}✦`;
-  }
-  const duelBestBadge = document.getElementById('modalPersonalBest');
-  if (duelBestBadge) duelBestBadge.style.display = 'none';
-  const duelChallengeEl = document.getElementById('modalChallengeResult');
-  if (duelChallengeEl) duelChallengeEl.style.display = 'none';
-  const duelChallengeBtn = document.getElementById('challengeLinkBtn');
-  if (duelChallengeBtn) duelChallengeBtn.style.display = 'none';
+  try {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalSubtitle').textContent = subtitle;
+    document.getElementById('finalMoves').textContent = STATE.moves;
+    const mins = Math.floor(STATE.elapsedTime / 60);
+    const secs = STATE.elapsedTime % 60;
+    document.getElementById('finalTime').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    document.getElementById('finalStreak').textContent = STATE.maxStreak;
+    const finalAccuracyEl = document.getElementById('finalAccuracy');
+    if (finalAccuracyEl) finalAccuracyEl.closest('div').style.display = 'none';
+    const finalAetherEl = document.getElementById('finalAetherEarned');
+    if (finalAetherEl) {
+      finalAetherEl.closest('div').style.display = '';
+      finalAetherEl.textContent = `${duelAetherEarned}✦`;
+    }
+    const duelBestBadge = document.getElementById('modalPersonalBest');
+    if (duelBestBadge) duelBestBadge.style.display = 'none';
+    const duelChallengeEl = document.getElementById('modalChallengeResult');
+    if (duelChallengeEl) duelChallengeEl.style.display = 'none';
+    const duelChallengeBtn = document.getElementById('challengeLinkBtn');
+    if (duelChallengeBtn) duelChallengeBtn.style.display = 'none';
 
-  // Stars don't mean anything in a head-to-head duel — leave them dark
-  const starsContainer = document.getElementById('starsContainer');
-  starsContainer.innerHTML = '';
+    // Stars don't mean anything in a head-to-head duel — leave them dark
+    const starsContainer = document.getElementById('starsContainer');
+    if (starsContainer) starsContainer.innerHTML = '';
+  } catch (e) {
+    // A single missing/renamed element must never take the rest of the
+    // modal down with it — log it so it's diagnosable, but keep going so
+    // whatever DID get set (including the title) still displays along
+    // with the reveal below, instead of the player seeing a half-blank
+    // modal with no obvious cause.
+    console.error('completeDuel: modal population error', e);
+  }
 
   setTimeout(() => {
     document.getElementById('modalOverlay').classList.add('active');

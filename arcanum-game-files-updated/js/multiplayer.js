@@ -103,7 +103,7 @@ function beginConnecting() {
   try {
     socket = new WebSocket(MP_SERVER_URL);
   } catch (e) {
-    setMpStatus('error', "Couldn't reach Check your connection and try again.");
+    setMpStatus('error', "Couldn't connect. Check your connection and try again.");
     return;
   }
   MP.socket = socket;
@@ -138,7 +138,7 @@ function beginConnecting() {
   });
 
   socket.addEventListener('error', () => {
-    setMpStatus('error', "Couldn't reach the relay server. Check your connection and try again.");
+    setMpStatus('error', "Couldn't connect right now. Check your connection and try again.");
   });
 }
 
@@ -243,26 +243,34 @@ function announceMpOpponentLeft() {
   if (STATE.timerInterval) { clearInterval(STATE.timerInterval); STATE.timerInterval = null; }
   MP.socket = null;
 
-  document.getElementById('modalTitle').textContent = 'Opponent Left';
-  document.getElementById('modalSubtitle').textContent = 'the opponent disconnected  no result';
-  const badgeSlot = document.getElementById('modalProfileBadge');
-  if (badgeSlot) { badgeSlot.style.display = 'none'; badgeSlot.innerHTML = ''; }
-  document.getElementById('modalChallengeResult').style.display = 'none';
-  document.getElementById('finalMoves').textContent = STATE.moves;
-  const mins = Math.floor(STATE.elapsedTime / 60);
-  const secs = STATE.elapsedTime % 60;
-  document.getElementById('finalTime').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-  document.getElementById('finalStreak').textContent = STATE.maxStreak;
-  const accuracyEl = document.getElementById('finalAccuracy');
-  if (accuracyEl) accuracyEl.closest('div').style.display = 'none';
-  const aetherEl = document.getElementById('finalAetherEarned');
-  if (aetherEl) aetherEl.closest('div').style.display = 'none';
-  const bestBadge = document.getElementById('modalPersonalBest');
-  if (bestBadge) bestBadge.style.display = 'none';
-  const challengeBtn = document.getElementById('challengeLinkBtn');
-  if (challengeBtn) challengeBtn.style.display = 'none';
-  const starsContainer = document.getElementById('starsContainer');
-  if (starsContainer) starsContainer.innerHTML = '';
+  try {
+    document.getElementById('modalTitle').textContent = 'Opponent Left';
+    document.getElementById('modalSubtitle').textContent = 'They disconnected — no result was recorded';
+    const badgeSlot = document.getElementById('modalProfileBadge');
+    if (badgeSlot) { badgeSlot.style.display = 'none'; badgeSlot.innerHTML = ''; }
+    const challengeResultEl = document.getElementById('modalChallengeResult');
+    if (challengeResultEl) challengeResultEl.style.display = 'none';
+    document.getElementById('finalMoves').textContent = STATE.moves;
+    const mins = Math.floor(STATE.elapsedTime / 60);
+    const secs = STATE.elapsedTime % 60;
+    document.getElementById('finalTime').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    document.getElementById('finalStreak').textContent = STATE.maxStreak;
+    const accuracyEl = document.getElementById('finalAccuracy');
+    if (accuracyEl) accuracyEl.closest('div').style.display = 'none';
+    const aetherEl = document.getElementById('finalAetherEarned');
+    if (aetherEl) aetherEl.closest('div').style.display = 'none';
+    const bestBadge = document.getElementById('modalPersonalBest');
+    if (bestBadge) bestBadge.style.display = 'none';
+    const challengeBtn = document.getElementById('challengeLinkBtn');
+    if (challengeBtn) challengeBtn.style.display = 'none';
+    const starsContainer = document.getElementById('starsContainer');
+    if (starsContainer) starsContainer.innerHTML = '';
+  } catch (e) {
+    // A single missing/renamed element must never prevent the "opponent
+    // left" notice itself from showing — see the matching note in
+    // completeDuel()/completeGame() in game.js.
+    console.error('announceMpOpponentLeft: modal population error', e);
+  }
 
   document.getElementById('modalOverlay').classList.add('active');
 }

@@ -127,6 +127,7 @@ let confettiParticles = [];
 
 function startConfetti() {
   const canvas = document.getElementById('confetti');
+  if (!canvas) return;
   const ctx = canvas.getContext('2d');
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
