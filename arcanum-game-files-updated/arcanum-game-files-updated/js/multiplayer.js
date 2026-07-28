@@ -69,12 +69,42 @@ function setMpStatus(status, text) {
   const findBtn = document.getElementById('mpFindMatchBtn');
   const closeBtn = document.getElementById('mpCloseBtn');
   const nicknameRow = document.getElementById('mpNicknameRow');
+  const inviteRow = document.getElementById('mpInviteRow');
   const searching = status === 'connecting' || status === 'queued';
   if (textEl) textEl.textContent = text;
   if (spinner) spinner.style.display = searching ? '' : 'none';
   if (findBtn) findBtn.style.display = (status === 'idle' || status === 'error') ? '' : 'none';
   if (closeBtn) closeBtn.textContent = searching ? 'Cancel' : 'Close';
   if (nicknameRow) nicknameRow.style.display = searching ? 'none' : '';
+  // Only a genuinely open room (fresh queue, not joining a friend's room
+  // or reconnecting for a rematch) has anyone to invite into.
+  if (inviteRow) {
+    const canInvite = status === 'queued' && !MP.pendingJoinRoomCode && !MP.rematchRoomCode;
+    inviteRow.style.display = canInvite ? '' : 'none';
+  }
+}
+
+// "Invite a Friend" button in the Duel Online modal — lets the player
+// share a direct link into their own waiting room instead of leaving it
+// purely to CrazyGames' automatic Invite UI (which the updateRoom() calls
+// in beginConnecting()/handleMpMessage() also drive).
+async function copyMpInviteLink() {
+  if (!MP.roomCode) return;
+  const btn = document.getElementById('mpInviteBtn');
+  let link = null;
+  try { link = crazySdk.game.inviteLink({ roomCode: MP.roomCode }); } catch (e) {}
+  if (!link) return;
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(link);
+    copied = true;
+  } catch (e) {}
+  if (btn) {
+    const original = btn.textContent;
+    btn.textContent = copied ? 'Link Copied!' : 'Copy Failed';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 2000);
+  }
 }
 
 async function openMpModal() {
@@ -154,6 +184,15 @@ function beginConnecting() {
       setMpStatus('queued', 'Searching for an opponent…');
       MP.roomCode = generateRoomCode();
       socket.send(JSON.stringify({ type: 'joinQueue', nickname, roomCode: MP.roomCode }));
+      // Tell CrazyGames this player can be invited/joined while waiting —
+      // matches the server's roomWaiters registration above. Cleared by
+      // updateRoom({isJoinable:false}) once matched (see handleMpMessage)
+      // or leftRoom() if the player cancels (see abandonMpIfActive).
+      crazySdk.game.updateRoom({
+        roomId: MP.roomCode,
+        isJoinable: true,
+        inviteParams: { roomCode: MP.roomCode },
+      });
     }
   });
 
@@ -232,30 +271,12 @@ function handleMpMessage(msg) {
       MP.youAre = msg.youAre;
       MP.opponentName = msg.opponentName;
       MP.status = 'matched';
-      STATE.mode = 'mp';
-      STATE.mpSeed = msg.seed;
-      closeMpModal();
-      
-     
-      if (window.CrazyGames && window.CrazyGames.SDK && window.CrazyGames.SDK.game) {
-          window.CrazyGames.SDK.game.updateRoom({
-              roomId: String(msg.seed),
-              isJoinable: true
-          });
-      }
-
-      initGame();
-      break;
-    }
-
-    case 'matchStart': {
-      if (MP.connectTimeout) { clearTimeout(MP.connectTimeout); MP.connectTimeout = null; }
-      MP.youAre = msg.youAre;
-      MP.opponentName = msg.opponentName;
-      MP.status = 'matched';
       MP.pendingJoinRoomCode = null;
       MP.rematchRoomCode = null;
       MP.lastMatchId = msg.matchId || null;
+      // The room just filled up (1v1) — no longer joinable, so CrazyGames
+      // stops offering it in the Invite/friends-drawer UI. (Opened in
+      // beginConnecting() when the player started waiting — see there.)
       crazySdk.game.updateRoom({ isJoinable: false });
       STATE.mode = 'mp';
       STATE.mpSeed = msg.seed;
@@ -438,8 +459,10 @@ function rematchMultiplayer() {
 
 const mpFindBtn = document.getElementById('mpFindMatchBtn');
 const mpCloseBtn = document.getElementById('mpCloseBtn');
+const mpInviteBtn = document.getElementById('mpInviteBtn');
 if (mpFindBtn) mpFindBtn.addEventListener('click', beginConnecting);
 if (mpCloseBtn) mpCloseBtn.addEventListener('click', cancelMultiplayerQueue);
+if (mpInviteBtn) mpInviteBtn.addEventListener('click', copyMpInviteLink);
 document.getElementById('mpModal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) cancelMultiplayerQueue();
 });

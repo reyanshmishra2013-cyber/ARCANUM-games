@@ -43,6 +43,32 @@ async function encryptLeaderboardScore(score, encryptionKey) {
 }
 
 /* ============================================================
+   Invite-link fallbacks — used only when the real CrazyGames SDK
+   isn't available (local dev/testing, or before crazySdk.init()
+   resolves), so the Duel Online "Invite a Friend" flow in
+   js/multiplayer.js is still testable outside the CrazyGames iframe.
+   The real SDK overrides all of this once it initializes.
+   ============================================================ */
+function readFallbackInviteParams() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (![...params.keys()].length) return null;
+    const obj = {};
+    params.forEach((v, k) => { obj[k] = v; });
+    return obj;
+  } catch (e) { return null; }
+}
+
+function buildFallbackInviteLink(params) {
+  try {
+    const url = new URL(window.location.href);
+    url.search = '';
+    Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
+    return url.toString();
+  } catch (e) { return null; }
+}
+
+/* ============================================================
    CRAZY GAMES SDK INTEGRATION
    ============================================================ */
 const crazySdk = {
@@ -81,6 +107,11 @@ const crazySdk = {
       this.game.getInviteParam = (key) => { try { return g.getInviteParam(key) } catch(e) { return null } };
       this.game.inviteParams = g.inviteParams || null;
       this.game.isInstantMultiplayer = !!g.isInstantMultiplayer;
+      // Generates the shareable invite link for the in-game "Invite a
+      // Friend" button (see js/multiplayer.js's copyMpInviteLink()) — not
+      // the same thing as the deprecated showInviteButton/hideInviteButton
+      // pair, which the updateRoom() calls above already replace.
+      this.game.inviteLink = (params) => { try { return g.inviteLink(params) } catch(e) { return buildFallbackInviteLink(params) } };
 
       this.game.loadingStart();
 
@@ -156,9 +187,13 @@ const crazySdk = {
     leftRoom: () => {},
     addJoinRoomListener: () => {},
     removeJoinRoomListener: () => {},
-    getInviteParam: () => null,
-    inviteParams: null,
+    getInviteParam: (key) => {
+      const p = readFallbackInviteParams();
+      return p ? (p[key] ?? null) : null;
+    },
+    inviteParams: readFallbackInviteParams(),
     isInstantMultiplayer: false,
+    inviteLink: (params) => buildFallbackInviteLink(params),
   },
 
   user: {
