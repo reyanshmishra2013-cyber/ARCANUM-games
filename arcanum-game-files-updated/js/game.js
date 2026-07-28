@@ -890,6 +890,7 @@ function completeDuel() {
   crazySdk.game.gameplayStop();
   crazySdk.game.happytime();
   crazySdk.game.reportGameCompletedPercentage(100);
+  if (STATE.mode === 'mp') crazySdk.game.leftRoom();
   const duelAetherEarned = recordGameEnd(true);
 
   audio.playCompletion();

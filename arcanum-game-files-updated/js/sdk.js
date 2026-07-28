@@ -71,6 +71,17 @@ const crazySdk = {
       this.game.loadingStop = () => { try { g.loadingStop() } catch(e) {} };
       this.game.settings = g.settings;
 
+      // Multiplayer room/invite functionality (see js/multiplayer.js) — lets
+      // CrazyGames' own Invite button and Join-a-friend UI activate whenever
+      // a player is waiting for or playing a Duel Online match.
+      this.game.updateRoom = (data) => { try { g.updateRoom(data) } catch(e) {} };
+      this.game.leftRoom = () => { try { g.leftRoom() } catch(e) {} };
+      this.game.addJoinRoomListener = (fn) => { try { g.addJoinRoomListener(fn) } catch(e) {} };
+      this.game.removeJoinRoomListener = (fn) => { try { g.removeJoinRoomListener(fn) } catch(e) {} };
+      this.game.getInviteParam = (key) => { try { return g.getInviteParam(key) } catch(e) { return null } };
+      this.game.inviteParams = g.inviteParams || null;
+      this.game.isInstantMultiplayer = !!g.isInstantMultiplayer;
+
       this.game.loadingStart();
 
       // Data module — localStorage-compatible API
@@ -141,6 +152,13 @@ const crazySdk = {
     loadingStart: () => {},
     loadingStop: () => {},
     settings: { muteAudio: false, disableChat: false },
+    updateRoom: () => {},
+    leftRoom: () => {},
+    addJoinRoomListener: () => {},
+    removeJoinRoomListener: () => {},
+    getInviteParam: () => null,
+    inviteParams: null,
+    isInstantMultiplayer: false,
   },
 
   user: {

@@ -43,6 +43,7 @@ const httpServer = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server: httpServer });
 
 let queue = []; // sockets waiting for an opponent, FIFO
+const roomWaiters = new Map(); // roomCode -> waiting socket (for direct friend joins via CrazyGames invites)
 const matches = new Map(); // matchId -> match state
 
 let nextMatchId = 1;
@@ -57,6 +58,15 @@ function sanitizeNickname(raw) {
   return trimmed || 'Wanderer';
 }
 
+function sanitizeRoomCode(raw) {
+  if (typeof raw !== 'string') return null;
+  // Client-generated — either a short alphanumeric code (generateRoomCode()
+  // in js/multiplayer.js) or a "rematch-<matchId>" code for reconnecting
+  // with a previous opponent.
+  const trimmed = raw.trim().slice(0, 24);
+  return /^[A-Za-z0-9-]+$/.test(trimmed) ? trimmed : null;
+}
+
 function makeSeed() {
   // Doesn't need to be cryptographically strong — it's a shuffle seed,
   // not a secret (see the module-level note on the deck not being secret).
@@ -65,6 +75,10 @@ function makeSeed() {
 
 function removeFromQueue(socket) {
   queue = queue.filter(s => s !== socket);
+  if (socket.roomCode) {
+    roomWaiters.delete(socket.roomCode);
+    socket.roomCode = null;
+  }
 }
 
 function tryMatchmake() {
@@ -78,6 +92,9 @@ function tryMatchmake() {
 }
 
 function startMatch(socketA, socketB) {
+  removeFromQueue(socketA);
+  removeFromQueue(socketB);
+
   const matchId = String(nextMatchId++);
   const seed = makeSeed();
   const match = {
@@ -93,8 +110,8 @@ function startMatch(socketA, socketB) {
   socketB.matchId = matchId;
   socketB.seat = 2;
 
-  safeSend(socketA, { type: 'matchStart', seed, youAre: 1, opponentName: socketB.nickname });
-  safeSend(socketB, { type: 'matchStart', seed, youAre: 2, opponentName: socketA.nickname });
+  safeSend(socketA, { type: 'matchStart', matchId, seed, youAre: 1, opponentName: socketB.nickname });
+  safeSend(socketB, { type: 'matchStart', matchId, seed, youAre: 2, opponentName: socketA.nickname });
 }
 
 function endMatch(matchId, reason, disconnectedSeat) {
@@ -114,6 +131,7 @@ wss.on('connection', (socket) => {
   socket.matchId = null;
   socket.seat = null;
   socket.nickname = 'Wanderer';
+  socket.roomCode = null;
 
   socket.on('pong', () => { socket.isAlive = true; });
 
@@ -127,8 +145,27 @@ wss.on('connection', (socket) => {
       if (socket.matchId || queue.includes(socket)) return;
       socket.queuedAt = Date.now();
       queue.push(socket);
+      const roomCode = sanitizeRoomCode(msg.roomCode);
+      if (roomCode && !roomWaiters.has(roomCode)) {
+        socket.roomCode = roomCode;
+        roomWaiters.set(roomCode, socket);
+      }
       safeSend(socket, { type: 'queued' });
       tryMatchmake();
+      return;
+    }
+
+    if (msg.type === 'joinRoom') {
+      // A friend accepted a CrazyGames invite (or clicked Join) for a
+      // specific waiting player's room, rather than random matchmaking.
+      socket.nickname = sanitizeNickname(msg.nickname);
+      const roomCode = sanitizeRoomCode(msg.roomCode);
+      const target = roomCode ? roomWaiters.get(roomCode) : null;
+      if (!target || target === socket || target.readyState !== target.OPEN || target.matchId) {
+        safeSend(socket, { type: 'roomNotFound' });
+        return;
+      }
+      startMatch(target, socket);
       return;
     }
 

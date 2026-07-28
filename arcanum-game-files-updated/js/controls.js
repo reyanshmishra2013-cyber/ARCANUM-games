@@ -41,8 +41,8 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 document.getElementById('playAgainBtn').addEventListener('click', () => {
   document.getElementById('modalOverlay').classList.remove('active');
   stopConfetti();
-  if (STATE.mode === 'mp' && typeof startMultiplayerQueue === 'function') {
-    setTimeout(() => startMultiplayerQueue(), 300);
+  if (STATE.mode === 'mp' && typeof rematchMultiplayer === 'function') {
+    setTimeout(() => rematchMultiplayer(), 300);
   } else {
     setTimeout(() => initGame(), 300);
   }
@@ -124,6 +124,7 @@ document.querySelectorAll('[data-mode]').forEach(btn => {
     if (STATE.mode === 'mp') {
       // Duel Online needs a server-issued seed before a board can be built —
       // js/multiplayer.js calls initGame() itself once matched.
+      if (typeof MP !== 'undefined') MP.rematchRoomCode = null;
       if (typeof startMultiplayerQueue === 'function') startMultiplayerQueue();
     } else {
       if (typeof abandonMpIfActive === 'function') abandonMpIfActive();

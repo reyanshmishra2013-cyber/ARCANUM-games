@@ -31,7 +31,16 @@ const MP = {
   opponentName: null,
   status: 'idle',        // 'idle' | 'connecting' | 'queued' | 'matched' | 'error'
   connectTimeout: null,
+  roomCode: null,          // this player's own waiting-room code, once queued
+  pendingJoinRoomCode: null, // set when joining a *specific* friend's room instead of random matchmaking
+  crazyUsername: null,      // signed-in CrazyGames username, when available — see openMpModal()
+  lastMatchId: null,        // id of the most recently completed match, for rematch()
+  rematchRoomCode: null,    // set right before reconnecting, to find the same opponent again
 };
+
+function generateRoomCode() {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
 
 function loadMpNickname() {
   try {
@@ -68,10 +77,27 @@ function setMpStatus(status, text) {
   if (nicknameRow) nicknameRow.style.display = searching ? 'none' : '';
 }
 
-function openMpModal() {
+async function openMpModal() {
   document.getElementById('mpModal').classList.add('active');
   const input = document.getElementById('mpNicknameInput');
-  if (input && !input.value) input.value = loadMpNickname();
+  if (!input) return;
+
+  // CrazyGames' multiplayer guidelines require real CrazyGames usernames to
+  // be shown in-game so friends can recognize each other — prefer that over
+  // the freeform nickname whenever the player is signed in.
+  if (crazySdk.user.isUserAccountAvailable) {
+    try {
+      const user = await crazySdk.user.getUser();
+      if (user && user.username) {
+        MP.crazyUsername = user.username;
+        input.value = user.username;
+        input.disabled = true;
+        return;
+      }
+    } catch (e) {}
+  }
+  input.disabled = false;
+  if (!input.value) input.value = loadMpNickname();
 }
 
 function closeMpModal() {
@@ -80,6 +106,8 @@ function closeMpModal() {
 
 // Entry point — wired to the "Duel Online" rite button.
 function startMultiplayerQueue() {
+  if (typeof stopConfetti === 'function') stopConfetti();
+  if (STATE.gameStarted) crazySdk.game.gameplayStop();
   openMpModal();
   if (!MP_SERVER_URL) {
     setMpStatus('error', "Duel Online isn't set up yet — no relay server has been deployed. See server/README.md.");
@@ -95,8 +123,8 @@ function beginConnecting() {
   }
 
   const input = document.getElementById('mpNicknameInput');
-  const nickname = (input && input.value.trim()) || 'Wanderer';
-  saveMpNickname(nickname);
+  const nickname = MP.crazyUsername || (input && input.value.trim()) || 'Wanderer';
+  if (!MP.crazyUsername) saveMpNickname(nickname);
 
   setMpStatus('connecting', 'Connecting to the realm…');
   let socket;
@@ -116,8 +144,17 @@ function beginConnecting() {
   }, MP_CONNECT_TIMEOUT_MS);
 
   socket.addEventListener('open', () => {
-    setMpStatus('queued', 'Searching for an opponent…');
-    socket.send(JSON.stringify({ type: 'joinQueue', nickname }));
+    if (MP.pendingJoinRoomCode) {
+      setMpStatus('queued', "Joining your friend's match…");
+      socket.send(JSON.stringify({ type: 'joinRoom', roomCode: MP.pendingJoinRoomCode, nickname }));
+    } else if (MP.rematchRoomCode) {
+      setMpStatus('queued', 'Reconnecting with your last opponent…');
+      socket.send(JSON.stringify({ type: 'joinRoom', roomCode: MP.rematchRoomCode, nickname }));
+    } else {
+      setMpStatus('queued', 'Searching for an opponent…');
+      MP.roomCode = generateRoomCode();
+      socket.send(JSON.stringify({ type: 'joinQueue', nickname, roomCode: MP.roomCode }));
+    }
   });
 
   socket.addEventListener('message', (event) => {
@@ -143,14 +180,10 @@ function beginConnecting() {
 }
 
 function cancelMultiplayerQueue() {
-  if (MP.connectTimeout) { clearTimeout(MP.connectTimeout); MP.connectTimeout = null; }
-  if (MP.socket) {
-    try {
-      if (MP.socket.readyState === WebSocket.OPEN) MP.socket.send(JSON.stringify({ type: 'leaveQueue' }));
-      MP.socket.close();
-    } catch (e) {}
+  if (MP.socket && MP.socket.readyState === WebSocket.OPEN) {
+    try { MP.socket.send(JSON.stringify({ type: 'leaveQueue' })); } catch (e) {}
   }
-  MP.socket = null;
+  abandonMpIfActive();
   closeMpModal();
   // No match was made yet, so falling back to the default rite is the
   // least surprising outcome rather than leaving the player on a mode
@@ -176,7 +209,11 @@ function abandonMpIfActive() {
   MP.socket = null;
   MP.youAre = null;
   MP.opponentName = null;
+  MP.roomCode = null;
+  MP.pendingJoinRoomCode = null;
+  MP.rematchRoomCode = null;
   if (MP.connectTimeout) { clearTimeout(MP.connectTimeout); MP.connectTimeout = null; }
+  crazySdk.game.leftRoom();
 }
 
 // Used by the header's Reset/Leave control while a Duel Online match is
@@ -192,6 +229,9 @@ function handleMpMessage(msg) {
   switch (msg.type) {
     case 'queued':
       setMpStatus('queued', 'Searching for an opponent…');
+      if (MP.roomCode) {
+        crazySdk.game.updateRoom({ roomId: MP.roomCode, isJoinable: true, inviteParams: { roomCode: MP.roomCode } });
+      }
       break;
 
     case 'matchStart': {
@@ -199,10 +239,40 @@ function handleMpMessage(msg) {
       MP.youAre = msg.youAre;
       MP.opponentName = msg.opponentName;
       MP.status = 'matched';
+      MP.pendingJoinRoomCode = null;
+      MP.rematchRoomCode = null;
+      MP.lastMatchId = msg.matchId || null;
+      crazySdk.game.updateRoom({ isJoinable: false });
       STATE.mode = 'mp';
       STATE.mpSeed = msg.seed;
       closeMpModal();
       initGame();
+      break;
+    }
+
+    case 'roomNotFound': {
+      // Either a friend's invited room is gone (already matched, or they
+      // left), or we tried to reconnect for a rematch and our old opponent
+      // hasn't clicked "Play Again" yet.
+      const wasRematch = !!MP.rematchRoomCode && !MP.pendingJoinRoomCode;
+      const waitCode = MP.pendingJoinRoomCode || MP.rematchRoomCode;
+      MP.pendingJoinRoomCode = null;
+      MP.rematchRoomCode = null;
+      if (MP.socket && MP.socket.readyState === WebSocket.OPEN) {
+        const input = document.getElementById('mpNicknameInput');
+        const nickname = MP.crazyUsername || (input && input.value.trim()) || 'Wanderer';
+        if (wasRematch) {
+          // Wait under the same shared code instead of jumping straight to
+          // a stranger — if our old opponent also clicks "Play Again" soon,
+          // they'll land in this same room and we'll reconnect.
+          setMpStatus('queued', 'Waiting for your last opponent to rejoin…');
+          MP.roomCode = waitCode;
+        } else {
+          setMpStatus('queued', "That match already started — searching for a new opponent…");
+          MP.roomCode = generateRoomCode();
+        }
+        MP.socket.send(JSON.stringify({ type: 'joinQueue', nickname, roomCode: MP.roomCode }));
+      }
       break;
     }
 
@@ -242,6 +312,7 @@ function announceMpOpponentLeft() {
   STATE.locked = true;
   if (STATE.timerInterval) { clearInterval(STATE.timerInterval); STATE.timerInterval = null; }
   MP.socket = null;
+  crazySdk.game.leftRoom();
 
   try {
     document.getElementById('modalTitle').textContent = 'Opponent Left';
@@ -294,6 +365,61 @@ function attemptMpFlip(idx) {
 function reportMpPairResult(matched) {
   if (!MP.socket || MP.socket.readyState !== WebSocket.OPEN) return;
   MP.socket.send(JSON.stringify({ type: 'pairResult', matched }));
+}
+
+// Takes the player straight into a specific friend's waiting room instead
+// of random matchmaking — used both when CrazyGames tells us about a join
+// while we're already in the game, and when the game was freshly loaded
+// from an invite link (see initMultiplayerSdkHooks below).
+function joinSpecificMpRoom(roomCode) {
+  if (typeof abandonMpIfActive === 'function') abandonMpIfActive();
+  if (typeof stopConfetti === 'function') stopConfetti();
+  if (STATE.gameStarted) crazySdk.game.gameplayStop();
+  STATE.mode = 'mp';
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === 'mp'));
+  const label = document.getElementById('ritesCurrentLabel');
+  if (label) label.textContent = 'Duel Online';
+  openMpModal();
+  MP.pendingJoinRoomCode = roomCode;
+  beginConnecting();
+}
+
+// CrazyGames calls this when a friend accepts an invite/clicks Join while
+// this tab is already open — see js/sdk.js's addJoinRoomListener wrapper.
+function handleCrazyJoinRoom(inviteParams) {
+  const roomCode = inviteParams && inviteParams.roomCode;
+  if (roomCode) joinSpecificMpRoom(roomCode);
+}
+
+// Called once from legal-tutorial.js right after crazySdk.init() resolves —
+// wires up the parts of Duel Online that depend on the real CrazyGames SDK
+// being ready: listening for friends joining mid-session, jumping straight
+// into a friend's room if we were launched from an invite link, and
+// honoring "Instant Multiplayer" launches from CrazyGames' Multiplayer UI.
+function initMultiplayerSdkHooks() {
+  crazySdk.game.addJoinRoomListener(handleCrazyJoinRoom);
+
+  const invitedRoomCode = crazySdk.game.getInviteParam('roomCode');
+  if (invitedRoomCode) {
+    joinSpecificMpRoom(invitedRoomCode);
+  } else if (crazySdk.game.isInstantMultiplayer) {
+    // "The first player in a party should be placed directly into a new
+    // private room" — skip the menu and go straight to a joinable match.
+    startMultiplayerQueue();
+    beginConnecting();
+  }
+}
+
+// Play Again in Duel Online — CrazyGames' round-based-games guideline asks
+// that players be able to keep playing with the same group without
+// navigating back through their UI, so this tries to reconnect specifically
+// with the last opponent (via a shared code derived from the finished
+// match's id) before the roomNotFound handler above falls back to random
+// matchmaking if they haven't also clicked "Play Again" yet.
+function rematchMultiplayer() {
+  MP.rematchRoomCode = MP.lastMatchId ? `rematch-${MP.lastMatchId}` : null;
+  startMultiplayerQueue();
+  beginConnecting();
 }
 
 const mpFindBtn = document.getElementById('mpFindMatchBtn');

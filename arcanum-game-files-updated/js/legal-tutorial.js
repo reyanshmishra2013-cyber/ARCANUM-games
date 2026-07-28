@@ -168,6 +168,11 @@ crazySdk.init().then(async () => {
 
   showTutorialIfNeeded();
 
+  // Duel Online's CrazyGames room/invite integration needs the real SDK
+  // (addJoinRoomListener, inviteParams, isInstantMultiplayer) — see
+  // js/multiplayer.js. Safe no-op if Duel Online isn't configured.
+  if (typeof initMultiplayerSdkHooks === 'function') initMultiplayerSdkHooks();
+
   // If the player is signed in to their CrazyGames account, greet them by name.
   // Purely cosmetic — no ads, no gating, safe for Basic Launch.
   if (crazySdk.user.isUserAccountAvailable) {
